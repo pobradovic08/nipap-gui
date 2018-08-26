@@ -260,7 +260,10 @@ class Application(tk.Frame):
             self.tree_status_menu.add_command(label="Reserved")
             self.tree_status_menu.add_command(label="Quarantine")
             self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
-            self.tree_menu.add_command(label="Add prefix", state=tk.DISABLED)
+            if self.tree.tag_has('reservation', iid):
+                self.tree_menu.add_command(label="Add prefix")
+            if self.tree.tag_has('assignment', iid):
+                self.tree_menu.add_command(label="Add host")
             self.tree_menu.add_separator()
             if self.tree.tag_has('host', iid):
                 self.tree_menu.add_command(label="SSH", image=self.icon_host, compound = tk.LEFT)
