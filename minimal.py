@@ -11,13 +11,6 @@ class Application(tk.Frame):
 
     def __init__(self, master=None):
 
-        self.data = {
-            '10.4.0.0/24': {'description': "Test prefix", "vlan": "4", "tags": "tag1, tag2, tag3", 'type': 'r'},
-            '10.4.0.1/24': {'description': "Test prefix", "vlan": "4", "tags": "tag1, tag2, tag3", 'type': 'a'},
-            '10.4.0.2/24': {'description': "Test prefix", "vlan": "4", "tags": "tag1, tag2, tag3", 'type': 'a'},
-            '10.4.0.3/24': {'description': "Test prefix", "vlan": "4", "tags": "tag1, tag2, tag3", 'type': 'h'},
-        }
-
         tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
         top = self.winfo_toplevel()
         top.rowconfigure(0, weight=1)
@@ -196,8 +189,6 @@ class Application(tk.Frame):
 
     def refresh(self, event=None):
         self.create_tree()
-        # self.tree.see('10.4.0.0/24')
-        # self.tree.selection_set('10.4.0.0/24')
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
