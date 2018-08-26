@@ -1,9 +1,11 @@
 import tkinter as tk
 import tkinter.font as tkf
 from tkinter import ttk
+import re
 import tkinter.messagebox as mbox
 
 from ipam_backend import IpamBackend
+
 
 class Application(tk.Frame):
 
@@ -58,14 +60,14 @@ class Application(tk.Frame):
         self.search_label.grid(row=0, column=0)
 
         self.search = tk.Entry(self.header, textvariable=self.search_string, font=('TkDefaultFont', 9, 'bold'))
-        self.search.grid(row=0, column=1, sticky=tk.E+tk.W)
+        self.search.grid(row=0, column=1, sticky=tk.E + tk.W)
         self.search.bind('<Return>', self.refresh)
 
         self.vrf_list = ('Mainstream', 'AIK')
         self.v = tk.StringVar()
         self.v.set(self.vrf_list[0])
         self.om = tk.OptionMenu(self.header, self.v, *self.vrf_list)
-        self.om.grid(row=0, column=3, sticky=tk.E+tk.W)
+        self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
         self.checkboxes = tk.Frame(self.header)
         self.checkboxes.grid(row=0, column=2)
@@ -82,7 +84,7 @@ class Application(tk.Frame):
         self.footer.columnconfigure(1, weight=1)
 
         self.status_label = tk.Label(self.footer, textvariable=self.status)
-        self.status_label.grid(row=0, column=0, sticky=tk.E+tk.S)
+        self.status_label.grid(row=0, column=0, sticky=tk.E + tk.S)
 
         self.refresh_button = tk.Button(self.footer, text='Refresh', command=self.refresh)
         self.refresh_button.grid(row=0, column=1, sticky=tk.E)
@@ -104,7 +106,7 @@ class Application(tk.Frame):
         self.tree.column('descr', anchor='w')
         self.tree.heading('descr', text='Descriptuon')
 
-        #TODO: move to init
+        # TODO: move to init
         ipam = IpamBackend()
         ipam.search(self.search_string.get())
 
@@ -114,19 +116,41 @@ class Application(tk.Frame):
         self.tree.tag_configure('reservation', image=self.icon_reservation)
         self.tree.tag_configure('assignment', image=self.icon_assignment)
         self.tree.tag_configure('host', image=self.icon_host)
+        self.tree.tag_configure('selected', background='#6688ff')
 
         # Display tree
-        self.tree.grid(column=0, row=0, sticky=tk.E+tk.W+tk.N+tk.S)
+        self.tree.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
         self.tree_scroll.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
 
         # Bind RMB to show context menu
         self.tree.bind("<Button-3>", self.popup)
 
     def populate_tree(self, prefix):
+        # Compile pattern from search string
+        pattern = re.compile(self.search_string.get())
+
+        # Iterate trough prefixes from provided part of the tree
         for p, pd in prefix['children'].items():
+
+            # If prefix data matches the search mark it as selected
+            # We need to add tag 'selected' for formatting before adding it to the tree and
+            # expand the tree (tree.see()) after adding it to the tree
+            # TODO: find out how to add tag after inserting the item in the tree
+            # TODO: move prefix matching to separate function
+            selected = True if self.search_string.get() and re.search(pattern, pd['prefix'].prefix) else False
+
+            prefix_tags = [pd['prefix'].type]
+
+            if selected:
+                prefix_tags.append('selected')
+
             self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
                 pd['prefix'].vlan, ', '.join(pd['prefix'].tags.keys()), pd['prefix'].description
-            ), tags=(pd['prefix'].type,))
+            ), tags=prefix_tags)
+
+            if selected:
+                self.tree.see(pd['prefix'].prefix)
+
             if pd['children']:
                 self.populate_tree(pd)
 
@@ -158,8 +182,8 @@ class Application(tk.Frame):
 
     def refresh(self, event=None):
         self.create_tree()
-        #self.tree.see('10.4.0.0/24')
-        #self.tree.selection_set('10.4.0.0/24')
+        # self.tree.see('10.4.0.0/24')
+        # self.tree.selection_set('10.4.0.0/24')
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
@@ -168,5 +192,5 @@ class Application(tk.Frame):
 
 
 app = Application()
-app.master.title('Sample application')
+app.master.title('NIPAP GUI')
 app.mainloop()

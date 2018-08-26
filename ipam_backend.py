@@ -27,7 +27,10 @@ class IpamBackend:
 
     def search(self, search_string=None):
         if search_string:
-            search_result = Prefix.smart_search(search_string, search_options={'parents_depth': -1})['result']
+            search_result = Prefix.smart_search(search_string, search_options={
+                'parents_depth': -1,
+                'children_depth': -1
+            })['result']
         else:
             search_result = Prefix.list()
         for prefix in search_result:
