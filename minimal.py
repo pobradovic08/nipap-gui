@@ -28,9 +28,12 @@ class Application(tk.Frame):
         # Can't call before creating root window
         self.status = tk.StringVar()
         self.search_string = tk.StringVar()
+        self.current_vrf = tk.StringVar()
         self.filter_reserved = tk.IntVar(value=1)
         self.filter_assigned = tk.IntVar(value=1)
         self.filter_quarantine = tk.IntVar(value=1)
+
+        self.ipam = IpamBackend()
 
         self.create_layout()
 
@@ -60,11 +63,13 @@ class Application(tk.Frame):
         #self.vrf_label = tk.Label(self.header, text="VRF:")
         #self.vrf_label.grid(row=0, column=3, sticky=tk.E)
 
-        self.vrf_list = ('Mainstream', 'AIK')
-        self.v = tk.StringVar()
-        self.v.set(self.vrf_list[0])
-        self.om = tk.OptionMenu(self.header, self.v, *self.vrf_list)
+        # Fetch VRFs
+        self.ipam.get_vrfs()
+        self.vrf_list = self.ipam.vrf_labels
+        self.current_vrf.set(list(self.vrf_list.keys())[0])
+        self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
+
 
         # self.button_search = tk.Button(self.header, text="Search")
         # self.button_search.grid(row=0, column=5, rowspan=2, sticky=tk.W + tk.E + tk.N + tk.S)
@@ -74,6 +79,7 @@ class Application(tk.Frame):
 
         self.vlan_entry = tk.Entry(self.header)
         self.vlan_entry.grid(row=1, column=1, sticky=tk.W)
+        self.vlan_entry.bind('<Return>', self.refresh)
 
         self.checkboxes = tk.Frame(self.header)
         self.checkboxes.grid(row=1, column=3)
@@ -112,11 +118,10 @@ class Application(tk.Frame):
         self.tree.column('descr', anchor='w')
         self.tree.heading('descr', text='Descriptuon')
 
-        # TODO: move to init
-        ipam = IpamBackend()
-        #ipam.search(self.search_string.get())
-
-        self.populate_tree(ipam.db)
+        # Lookup selected vrf id in vrf_list dict
+        vrf_id = self.vrf_list.get(self.current_vrf.get())
+        self.ipam.search(self.search_string.get(), vrf_id)
+        self.populate_tree(self.ipam.db)
 
         # Colorize rows
         self.tree.tag_configure('reservation', image=self.icon_reservation)

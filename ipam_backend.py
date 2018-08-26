@@ -10,9 +10,9 @@ class IpamBackend:
         config = configparser.ConfigParser()
         config.read('config.ini')
         nipap_config = config['nipap']
-        self.db = {
-            'children': {}
-        }
+        self.vrfs = {}
+        self.vrf_labels = {}
+        self._init_db()
         if 'host' in nipap_config:
             nipap_url = "http://%s:%s@%s:%d/XMLRPC" % (
                 nipap_config['username'],
@@ -25,15 +25,45 @@ class IpamBackend:
                 'authoritative_source': 'nipap-gui'
             })
 
-    def search(self, search_string=None):
-        if search_string:
-            search_result = Prefix.smart_search(search_string, search_options={
-                'parents_depth': -1,
-                'children_depth': -1,
-                'max_result': 0
-            })['result']
-        else:
-            search_result = Prefix.list()
+    def _init_db(self):
+        """
+        Initialize `db` dictionary
+        :return:
+        """
+        self.db = {
+            'children': {}
+        }
+
+    def get_vrfs(self):
+        vrf_list = VRF.list()
+        for vrf in vrf_list:
+            self.vrfs[vrf.id] = {
+                'label': "%s [%s]" % (vrf.name, vrf.rt),
+                'vrf': vrf
+            }
+            label = "%s [%s]" % (vrf.name, vrf.rt) if vrf.rt else vrf.name
+            self.vrf_labels[label] = str(vrf.id)
+
+    def search(self, search_string='', vrf_id=None):
+        # Clear current dictionary
+        self._init_db()
+
+        # Build VRF query based on `vrf_id` to be used as `extra_query` param
+        vrf_q = None if not vrf_id else {
+            'operator': 'equals',
+            'val1': 'vrf_id',
+            'val2': vrf_id
+        }
+
+        #Debug
+        #print(vrf_q)
+
+        search_result = Prefix.smart_search(search_string, search_options={
+            'parents_depth': -1,
+            'children_depth': -1,
+            'max_result': 0
+        }, extra_query=vrf_q)['result']
+
         for prefix in search_result:
             #print("Prefix %s" % prefix.prefix)
             self.find_parent(prefix, self.db)
