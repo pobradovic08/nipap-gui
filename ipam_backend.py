@@ -10,10 +10,12 @@ class IpamBackend:
         config = configparser.ConfigParser()
         config.read('config.ini')
         nipap_config = config['nipap']
+        self.host = ""
         self.vrfs = {}
         self.vrf_labels = {}
         self._init_db()
         if 'host' in nipap_config:
+            self.host = nipap_config['host']
             nipap_url = "http://%s:%s@%s:%d/XMLRPC" % (
                 nipap_config['username'],
                 nipap_config['password'],
@@ -41,7 +43,7 @@ class IpamBackend:
                 'label': "%s [%s]" % (vrf.name, vrf.rt),
                 'vrf': vrf
             }
-            label = "%s [%s]" % (vrf.name, vrf.rt) if vrf.rt else vrf.name
+            label = "VRF %s [%s]" % (vrf.name, vrf.rt) if vrf.rt else "VRF %s" % vrf.name
             self.vrf_labels[label] = str(vrf.id)
 
     def search(self, search_string='', vrf_id=None):

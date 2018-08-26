@@ -21,9 +21,7 @@ class Application(tk.Frame):
         self.columnconfigure(0, weight=1)
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
 
-        self.icon_host = tk.PhotoImage(file='host.gif')
-        self.icon_assignment = tk.PhotoImage(file='test.gif')
-        self.icon_reservation = tk.PhotoImage(file='test2.gif')
+        self.define_icons()
 
         # Can't call before creating root window
         self.status = tk.StringVar()
@@ -36,6 +34,21 @@ class Application(tk.Frame):
         self.ipam = IpamBackend()
 
         self.create_layout()
+
+    def define_icons(self):
+        self.icon_host = tk.PhotoImage(file='host.gif')
+        self.icon_host_reserved = tk.PhotoImage(file='host_reserved.gif')
+        self.icon_host_quarantine = tk.PhotoImage(file='host_quarantine.gif')
+
+        self.icon_assignment = tk.PhotoImage(file='assignment.gif')
+        self.icon_assignment_reserved = tk.PhotoImage(file='assignment_reserved.gif')
+        self.icon_assignment_quarantine = tk.PhotoImage(file='assignment_quarantine.gif')
+
+        self.icon_reservation = tk.PhotoImage(file='reservation.gif')
+        self.icon_reservation_reserved = tk.PhotoImage(file='reservation_reserved.gif')
+        self.icon_reservation_quarantine = tk.PhotoImage(file='reservation_quarantine.gif')
+
+        self.icon_arrow = tk.PhotoImage(file='arrow.gif')
 
     def create_layout(self):
         self.create_header()
@@ -68,6 +81,7 @@ class Application(tk.Frame):
         self.vrf_list = self.ipam.vrf_labels
         self.current_vrf.set(list(self.vrf_list.keys())[0])
         self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
+        self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
 
@@ -120,13 +134,25 @@ class Application(tk.Frame):
 
         # Lookup selected vrf id in vrf_list dict
         vrf_id = self.vrf_list.get(self.current_vrf.get())
+        self.status.set("Searching %s for '%s'..." % (self.current_vrf.get(), self.search_string.get()))
         self.ipam.search(self.search_string.get(), vrf_id)
         self.populate_tree(self.ipam.db)
+        self.status.set("Connected to %s" % self.ipam.host)
 
         # Colorize rows
-        self.tree.tag_configure('reservation', image=self.icon_reservation)
-        self.tree.tag_configure('assignment', image=self.icon_assignment)
-        self.tree.tag_configure('host', image=self.icon_host)
+        # Assigned
+        self.tree.tag_configure('reservation_assigned', image=self.icon_reservation)
+        self.tree.tag_configure('assignment_assigned', image=self.icon_assignment)
+        self.tree.tag_configure('host_assigned', image=self.icon_host)
+        # Reserved
+        self.tree.tag_configure('reservation_reserved', image=self.icon_reservation_reserved)
+        self.tree.tag_configure('assignment_reserved', image=self.icon_assignment_reserved)
+        self.tree.tag_configure('host_reserved', image=self.icon_host_reserved)
+        # Quarantine
+        self.tree.tag_configure('reservation_quarantine', image=self.icon_reservation_quarantine)
+        self.tree.tag_configure('assignment_quarantine', image=self.icon_assignment_quarantine)
+        self.tree.tag_configure('host_quarantine', image=self.icon_host_quarantine)
+        # Selected
         self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '9', 'bold'))
 
         # Display tree
@@ -155,7 +181,8 @@ class Application(tk.Frame):
             selected = True if self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix']) else False
 
             # Predefined prefix tags (prefix type from NIPAP)
-            prefix_tags = [pd['prefix'].type]
+            default_tag = "%s_%s" % (pd['prefix'].type, pd['prefix'].status)
+            prefix_tags = [default_tag]
 
             # Append selected tag if needed
             if selected:
