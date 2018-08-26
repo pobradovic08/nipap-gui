@@ -16,6 +16,7 @@ class Application(tk.Frame):
         top.rowconfigure(0, weight=1)
         top.columnconfigure(0, weight=1)
         top.geometry('1024x768')
+        top.iconbitmap('nipap-gui.ico')
         self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
@@ -50,11 +51,14 @@ class Application(tk.Frame):
         self.header.columnconfigure(1, weight=1)
 
         self.search_label = tk.Label(self.header, text="Prefix search:")
-        self.search_label.grid(row=0, column=0)
+        self.search_label.grid(row=0, column=0, sticky=tk.E)
 
         self.search = tk.Entry(self.header, textvariable=self.search_string, font=('TkDefaultFont', 9, 'bold'))
-        self.search.grid(row=0, column=1, sticky=tk.E + tk.W)
+        self.search.grid(row=0, column=1, columnspan=2, sticky=tk.E + tk.W)
         self.search.bind('<Return>', self.refresh)
+
+        #self.vrf_label = tk.Label(self.header, text="VRF:")
+        #self.vrf_label.grid(row=0, column=3, sticky=tk.E)
 
         self.vrf_list = ('Mainstream', 'AIK')
         self.v = tk.StringVar()
@@ -62,13 +66,22 @@ class Application(tk.Frame):
         self.om = tk.OptionMenu(self.header, self.v, *self.vrf_list)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
+        # self.button_search = tk.Button(self.header, text="Search")
+        # self.button_search.grid(row=0, column=5, rowspan=2, sticky=tk.W + tk.E + tk.N + tk.S)
+
+        self.vlan_label = tk.Label(self.header, text="Vlan ID:")
+        self.vlan_label.grid(row=1, column=0, sticky=tk.E)
+
+        self.vlan_entry = tk.Entry(self.header)
+        self.vlan_entry.grid(row=1, column=1, sticky=tk.W)
+
         self.checkboxes = tk.Frame(self.header)
-        self.checkboxes.grid(row=0, column=2)
+        self.checkboxes.grid(row=1, column=3)
         self.chk_reserved = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved)
         self.chk_reserved.pack(side=tk.LEFT)
         self.chk_assigned = tk.Checkbutton(self.checkboxes, text="Assigned", variable=self.filter_assigned)
         self.chk_assigned.pack(side=tk.LEFT)
-        self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_quarantine)
+        self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine)
         self.chk_quarantine.pack(side=tk.LEFT)
 
     def create_footer(self):
@@ -101,7 +114,7 @@ class Application(tk.Frame):
 
         # TODO: move to init
         ipam = IpamBackend()
-        ipam.search(self.search_string.get())
+        #ipam.search(self.search_string.get())
 
         self.populate_tree(ipam.db)
 
