@@ -116,7 +116,7 @@ class Application(tk.Frame):
         self.tree.tag_configure('reservation', image=self.icon_reservation)
         self.tree.tag_configure('assignment', image=self.icon_assignment)
         self.tree.tag_configure('host', image=self.icon_host)
-        self.tree.tag_configure('selected', background='#6688ff')
+        self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '9', 'bold'))
 
         # Display tree
         self.tree.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
@@ -127,7 +127,7 @@ class Application(tk.Frame):
 
     def populate_tree(self, prefix):
         # Compile pattern from search string
-        pattern = re.compile(self.search_string.get())
+        pattern = re.compile(self.search_string.get(), re.IGNORECASE)
 
         # Iterate trough prefixes from provided part of the tree
         for p, pd in prefix['children'].items():
@@ -136,8 +136,7 @@ class Application(tk.Frame):
             # We need to add tag 'selected' for formatting before adding it to the tree and
             # expand the tree (tree.see()) after adding it to the tree
             # TODO: find out how to add tag after inserting the item in the tree
-            # TODO: move prefix matching to separate function
-            selected = True if self.search_string.get() and re.search(pattern, pd['prefix'].prefix) else False
+            selected = True if self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix']) else False
 
             prefix_tags = [pd['prefix'].type]
 
@@ -153,6 +152,21 @@ class Application(tk.Frame):
 
             if pd['children']:
                 self.populate_tree(pd)
+
+    def search_matches_prefix(self, pattern, prefix):
+        if not self.search_string.get():
+            return False
+
+        match_against = [
+            prefix.prefix,
+            prefix.description,
+            prefix.comment
+        ]
+
+        for value in match_against:
+            if value and re.search(pattern, value):
+                return True
+
 
     def popup(self, event):
         """action in event of button 3 on tree view"""
