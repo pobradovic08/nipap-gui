@@ -29,11 +29,13 @@ class IpamBackend:
         if search_string:
             search_result = Prefix.smart_search(search_string, search_options={
                 'parents_depth': -1,
-                'children_depth': -1
+                'children_depth': -1,
+                'max_result': 0
             })['result']
         else:
             search_result = Prefix.list()
         for prefix in search_result:
+            #print("Prefix %s" % prefix.prefix)
             self.find_parent(prefix, self.db)
 
     def find_parent(self, prefix, tree, parent_candidate='', depth=0):
@@ -44,9 +46,9 @@ class IpamBackend:
                 'prefix': prefix,
                 'children': {}
             }
+            #print("%s -> %s" % (prefix.prefix, parent_candidate))
             return "%s -> %s" % (prefix.prefix, parent_candidate)
         for p in tree['children']:
-            # print("Debug: %s" % p)
             parent_network = ipaddress.ip_network(p)
             try:
                 if self.is_subnet_of(network, parent_network):

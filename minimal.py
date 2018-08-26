@@ -118,59 +118,88 @@ class Application(tk.Frame):
         # Bind RMB to show context menu
         self.tree.bind("<Button-3>", self.popup)
 
-    def populate_tree(self, prefix):
+    def populate_tree(self, tree_part):
+        """
+        Recursively ill `self.tree` TreeView object with prefixes from `tree_part`.
+        Marks prefixes (tags them) that match search criteria so they can be displayed differently in tree
+        :param tree_part:
+        :return:
+        """
         # Compile pattern from search string
         pattern = re.compile(self.search_string.get(), re.IGNORECASE)
 
         # Iterate trough prefixes from provided part of the tree
-        for p, pd in prefix['children'].items():
+        for p, pd in tree_part['children'].items():
 
             # If prefix data matches the search mark it as selected
             # We need to add tag 'selected' for formatting before adding it to the tree and
             # expand the tree (tree.see()) after adding it to the tree
-            # TODO: find out how to add tag after inserting the item in the tree
             selected = True if self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix']) else False
 
+            # Predefined prefix tags (prefix type from NIPAP)
             prefix_tags = [pd['prefix'].type]
 
+            # Append selected tag if needed
             if selected:
                 prefix_tags.append('selected')
 
+            # Insert item into the tree
             self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
                 pd['prefix'].vlan, ', '.join(pd['prefix'].tags.keys()), pd['prefix'].description
             ), tags=prefix_tags)
 
+            # If prefix matches search criteria expand tree so prefix is visible
             if selected:
                 self.tree.see(pd['prefix'].prefix)
 
+            # Call itself with prefix children
             if pd['children']:
                 self.populate_tree(pd)
 
     def search_matches_prefix(self, pattern, prefix):
+        """
+        Returns True if any of defined prefix attributes matches search criteria
+        :param pattern: Compiled re expression
+        :param prefix: pynipap Prefix object
+        :return:
+        """
+
+        # If the search string is empty or none don't mark any prefixes
         if not self.search_string.get():
             return False
 
+        # List of values to check
         match_against = [
             prefix.prefix,
             prefix.description,
             prefix.comment
         ]
 
+        # Search for `pattern` in list of values
         for value in match_against:
             if value and re.search(pattern, value):
                 return True
 
-
     def popup(self, event):
-        """action in event of button 3 on tree view"""
-        # select row under mouse
+        """
+        Displays context menu when right clicking TreeView item (row)
+        Also selects the TreeView row
+        :param event:
+        :return:
+        """
+        # Get iid for row under mouse pointer
         iid = self.tree.identify_row(event.y)
         if iid:
-            # mouse pointer over item
+            # Select row
             self.tree.selection_set(iid)
 
+            # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
-
+            # Define menu items
+            self.tree_menu.add_command(label="Copy IP")
+            self.tree_menu.add_command(label="Copy netmask")
+            self.tree_menu.add_command(label="Copy CIDR")
+            self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Edit")
             self.tree_menu.add_command(label="Add prefix", state=tk.DISABLED)
             self.tree_menu.add_separator()
@@ -179,13 +208,8 @@ class Application(tk.Frame):
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Delete", activebackground='#770000',
                                        command=lambda: self.delete_prefix(iid))
-
+            # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
-        else:
-            # mouse pointer not over item
-            # occurs when items do not fill frame
-            # no action required
-            pass
 
     def refresh(self, event=None):
         self.create_tree()
