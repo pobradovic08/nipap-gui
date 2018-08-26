@@ -3,6 +3,8 @@ import tkinter.font as tkf
 from tkinter import ttk
 import tkinter.messagebox as mbox
 
+from ipam_backend import IpamBackend
+
 class Application(tk.Frame):
 
     def __init__(self, master=None):
@@ -24,8 +26,8 @@ class Application(tk.Frame):
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
 
         self.icon_host = tk.PhotoImage(file='host.gif')
-        self.icon_assignment = tk.PhotoImage(file='test2.gif')
-        self.icon_reservation = tk.PhotoImage(file='test.gif')
+        self.icon_assignment = tk.PhotoImage(file='test.gif')
+        self.icon_reservation = tk.PhotoImage(file='test2.gif')
 
         # Can't call before creating root window
         self.status = tk.StringVar()
@@ -101,29 +103,16 @@ class Application(tk.Frame):
         self.tree.column('descr', anchor='w')
         self.tree.heading('descr', text='Descriptuon')
 
-        self.tree.insert('', 'end', '10.4.0.0/20', text='10.4.0.0/20', values=('1', 'main', 'Hehe'))
+        #TODO: move to init
+        ipam = IpamBackend()
+        ipam.search('')
 
-        for prefix, data in self.data.items():
-            self.tree.insert('10.4.0.0/20', 'end', iid=prefix, text=prefix,
-                             values=(data['vlan'], data['tags'], data['description']),
-                             tags=(data['type'],))
-
-        self.tree.insert('', 'end', 'widgets', text='Widget Tour')
-        # Same thing, but inserted as first child:
-        self.tree.insert('', 0, 'gallery', text='Applications')
-
-        # Treeview chooses the id:
-        id = self.tree.insert('', 'end', text='Tutorial')
-
-        # Inserted underneath an existing node:
-        self.tree.insert('widgets', 'end', text='Canvas')
-        self.tree.insert(id, 'end', text='Tree')
-        self.tree.insert('', 'end', text='Listbox', values=('15KB', 'Yesterday mark', 'ok'))
+        self.populate_tree(ipam.db)
 
         # Colorize rows
-        self.tree.tag_configure('r', image=self.icon_reservation)
-        self.tree.tag_configure('a', image=self.icon_assignment)
-        self.tree.tag_configure('h', image=self.icon_host)
+        self.tree.tag_configure('reservation', image=self.icon_reservation)
+        self.tree.tag_configure('assignment', image=self.icon_assignment)
+        self.tree.tag_configure('host', image=self.icon_host)
 
         # Display tree
         self.tree.grid(column=0, row=0, sticky=tk.E+tk.W+tk.N+tk.S)
@@ -131,6 +120,14 @@ class Application(tk.Frame):
 
         # Bind RMB to show context menu
         self.tree.bind("<Button-3>", self.popup)
+
+    def populate_tree(self, prefix):
+        for p, pd in prefix['children'].items():
+            self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
+                pd['prefix'].vlan, ', '.join(pd['prefix'].tags.keys()), pd['prefix'].description
+            ), tags=(pd['prefix'].type,))
+            if pd['children']:
+                self.populate_tree(pd)
 
     def popup(self, event):
         """action in event of button 3 on tree view"""
