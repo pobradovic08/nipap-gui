@@ -3,6 +3,7 @@ import tkinter.font as tkf
 from tkinter import ttk
 import re
 import tkinter.messagebox as mbox
+import ipaddress
 
 from ipam_backend import IpamBackend
 
@@ -120,7 +121,7 @@ class Application(tk.Frame):
 
     def create_tree(self):
         self.tree_scroll = tk.Scrollbar(self.body)
-        self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr'), yscrollcommand=self.tree_scroll.set)
+        self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'), yscrollcommand=self.tree_scroll.set)
         self.tree_scroll.config(command=self.tree.yview)
 
         self.tree.column('vlan', width=70, anchor='center', stretch=False)
@@ -130,7 +131,11 @@ class Application(tk.Frame):
         self.tree.heading('tags', text='Tags')
 
         self.tree.column('descr', anchor='w')
-        self.tree.heading('descr', text='Descriptuon')
+        self.tree.heading('descr', anchor='w', text='Descriptuon')
+
+        self.tree.column('comment', anchor='w')
+        self.tree.heading('comment', anchor='w', text='Comment')
+
 
         # Lookup selected vrf id in vrf_list dict
         vrf_id = self.vrf_list.get(self.current_vrf.get())
@@ -182,7 +187,7 @@ class Application(tk.Frame):
 
             # Predefined prefix tags (prefix type from NIPAP)
             default_tag = "%s_%s" % (pd['prefix'].type, pd['prefix'].status)
-            prefix_tags = [default_tag]
+            prefix_tags = [default_tag, pd['prefix'].type]
 
             # Append selected tag if needed
             if selected:
@@ -190,7 +195,10 @@ class Application(tk.Frame):
 
             # Insert item into the tree
             self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
-                pd['prefix'].vlan, ', '.join(pd['prefix'].tags.keys()), pd['prefix'].description
+                pd['prefix'].vlan or '',
+                ', '.join(pd['prefix'].tags.keys()),
+                pd['prefix'].description or '',
+                pd['prefix'].comment or ''
             ), tags=prefix_tags)
 
             # If prefix matches search criteria expand tree so prefix is visible
@@ -237,13 +245,14 @@ class Application(tk.Frame):
         if iid:
             # Select row
             self.tree.selection_set(iid)
+            prefix = self.tree.item(iid)['text']
 
             # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
             # Define menu items
-            self.tree_menu.add_command(label="Copy IP")
-            self.tree_menu.add_command(label="Copy netmask")
-            self.tree_menu.add_command(label="Copy CIDR")
+            self.tree_menu.add_command(label="Copy IP", command=lambda: self.copy_to_clipboard(prefix, 'ip'))
+            self.tree_menu.add_command(label="Copy netmask", command=lambda: self.copy_to_clipboard(prefix, 'mask'))
+            self.tree_menu.add_command(label="Copy CIDR", command=lambda: self.copy_to_clipboard(prefix, 'cidr'))
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Edit")
             self.tree_status_menu = tk.Menu(tearoff=0)
@@ -253,13 +262,40 @@ class Application(tk.Frame):
             self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
             self.tree_menu.add_command(label="Add prefix", state=tk.DISABLED)
             self.tree_menu.add_separator()
-            self.tree_menu.add_command(label="SSH", image=self.icon_host, compound = tk.LEFT)
-            self.tree_menu.add_command(label="Telnet")
-            self.tree_menu.add_separator()
+            if self.tree.tag_has('host', iid):
+                self.tree_menu.add_command(label="SSH", image=self.icon_host, compound = tk.LEFT)
+                self.tree_menu.add_command(label="Telnet")
+                self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Delete", activebackground='#770000',
                                        command=lambda: self.delete_prefix(iid))
             # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
+
+    def copy_to_clipboard(self, prefix, what):
+        """
+        Copy prefix info to clipboard
+        :param prefix:
+        :param what: ['ip', 'mask', 'cidr']
+        :return:
+        """
+        if what not in ('ip', 'mask', 'cidr'):
+            return
+        # Build IpInterface object (ipv4 or ipv6) from prefix name
+        # We're using correct subnet mask (instead of /32 like in database)
+        address = ipaddress.ip_interface(prefix)
+        # Clear clipboard
+        self.clipboard_clear()
+
+        # Set IP address, subnet mask or IP in CIDR notation
+        if what == 'ip':
+            self.clipboard_append(address.ip)
+        elif what == 'mask':
+            self.clipboard_append(address.network.netmask)
+        elif what == 'cidr':
+            self.clipboard_append(address.with_prefixlen)
+
+        # Update clipboard
+        self.update()
 
     def refresh(self, event=None):
         self.create_tree()
