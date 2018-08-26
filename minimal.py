@@ -31,6 +31,7 @@ class Application(tk.Frame):
 
         # Can't call before creating root window
         self.status = tk.StringVar()
+        self.search_string = tk.StringVar()
         self.filter_reserved = tk.IntVar(value=1)
         self.filter_assigned = tk.IntVar(value=1)
         self.filter_quarantine = tk.IntVar(value=1)
@@ -56,7 +57,7 @@ class Application(tk.Frame):
         self.search_label = tk.Label(self.header, text="Prefix search:")
         self.search_label.grid(row=0, column=0)
 
-        self.search = tk.Entry(self.header, textvariable=self.status, font=('TkDefaultFont', 9, 'bold'))
+        self.search = tk.Entry(self.header, textvariable=self.search_string, font=('TkDefaultFont', 9, 'bold'))
         self.search.grid(row=0, column=1, sticky=tk.E+tk.W)
         self.search.bind('<Return>', self.refresh)
 
@@ -105,7 +106,7 @@ class Application(tk.Frame):
 
         #TODO: move to init
         ipam = IpamBackend()
-        ipam.search('')
+        ipam.search(self.search_string.get())
 
         self.populate_tree(ipam.db)
 
@@ -156,10 +157,9 @@ class Application(tk.Frame):
             pass
 
     def refresh(self, event=None):
-        self.data['10.4.0.4/24'] = {'description': "Test prefix", "vlan": "45", "tags": "tag1, tag2, tag3", 'type': 'h'}
         self.create_tree()
-        self.tree.see('10.4.0.0/24')
-        self.tree.selection_set('10.4.0.0/24')
+        #self.tree.see('10.4.0.0/24')
+        #self.tree.selection_set('10.4.0.0/24')
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
