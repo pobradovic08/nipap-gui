@@ -16,19 +16,20 @@ from ipam_backend import IpamBackend
 class GuiThread:
 
     def __init__(self):
-        self.queue = queue.Queue()
-        app = NipapGui(main_queue=q)
+        app = NipapGui()
         app.master.title('NIPAP GUI')
         app.mainloop()
 
 
 class NipapGui(tk.Frame):
 
-    def __init__(self, master=None, main_queue=None):
+    def __init__(self, master=None):
 
         self.queue = queue.Queue()
+        self.prefixes = {}
 
-        self.ipam_connect_thread = threading.Thread(target=self.ipam_backend_connect)
+        # Spawn a thread for nipap initial connect
+        self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
         self.ipam_connect_thread.start()
 
         tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
@@ -37,7 +38,7 @@ class NipapGui(tk.Frame):
         top.columnconfigure(0, weight=1)
         top.geometry('1024x768')
         top.iconbitmap('nipap-gui.ico')
-        self.rowconfigure(2, weight=1)
+        self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
 
@@ -51,57 +52,76 @@ class NipapGui(tk.Frame):
         self.filter_assigned = tk.IntVar(value=1)
         self.filter_quarantine = tk.IntVar(value=1)
 
-        self.bind('<<nipap_connected>>', self.test)
+        self.bind('<<nipap_connected>>', self.connected)
+        self.bind('<<nipap_refresh>>', self.refresh)
 
-        #self.ipam = IpamBackend(self.queue)
         self.display_loading()
-        #self.periodicCall()
 
-        #self.create_layout()
+    def connected(self, e):
+        self.read_queue()
+        self.loading.destroy()
+        self.create_layout()
+        self.ipam_search_thread = threading.Thread(target=self.thread_ipam_search)
+        self.ipam_search_thread.start()
 
-    def test(self, e):
-        self.wait_for_connection()
-
-    def periodicCall(self):
-        """
-        Check every 200 ms if there is something new in the queue.
-        """
-        self.wait_for_connection()
-        self.master.after(200, self.periodicCall)
 
     def display_loading(self):
         self.loading = tk.Frame(self)
-        self.loading.rowconfigure(0, weight=1)
-        self.loading.columnconfigure(0, weight=1)
+        # self.loading.rowconfigure(0, weight=1)
+        # self.loading.columnconfigure(0, weight=1)
+        self.loading.grid(row=0, column=0)
+
         label = tk.Label(self.loading, text="Connecting to server...")
         label.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
         self.pb = tk.ttk.Progressbar(self.loading, mode='indeterminate')
         self.pb.start()
         self.pb.grid(row=1, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
-        self.loading.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
 
-    def wait_for_connection(self):
+    def read_queue(self):
         while self.queue.qsize():
             try:
                 msg = self.queue.get()
-                if msg == 'connected':
-                    self.loading.destroy()
-                    self.create_layout()
-                elif msg == 'refresh':
-                    self.refresh()
+                if msg['type'] == 'vrfs':
+                    self.vrf_list = msg['data']
+                elif msg['type'] == 'prefixes':
+                    self.prefixes = msg['data']
                 print(msg)
             except queue.Empty:
                 pass
 
-    def ipam_backend_connect(self):
+    def thread_ipam_connect(self):
         self.ipam = IpamBackend(self.queue)
         try:
             self.event_generate('<<nipap_connected>>', when='tail')
-            self.queue.put("connected")
+            self.queue.put({
+                'type': 'vrfs',
+                'data': self.ipam.vrf_labels,
+                'status': 'ok'
+            })
         except tk.TclError:
             return
 
+    def thread_ipam_search(self):
+        self.status.set("Searching %s for '%s'..." % (self.current_vrf.get(), self.search_string.get()))
+        # Lookup selected vrf id in vrf_list dict
+        vrf_id = self.vrf_list.get(self.current_vrf.get())
+        self.ipam.search(self.search_string.get(), vrf_id)
+        try:
+            self.event_generate('<<nipap_refresh>>', when='tail')
+            self.queue.put({
+                'type': 'prefixes',
+                'data': self.ipam.db,
+                'status': 'ok'
+            })
+        except tk.TclError as e:
+            print(e)
+            return
+
     def define_icons(self):
+        """
+        Creates references for all images used
+        :return:
+        """
         self.icon_host = tk.PhotoImage(file='host.gif')
         self.icon_host_reserved = tk.PhotoImage(file='host_reserved.gif')
         self.icon_host_quarantine = tk.PhotoImage(file='host_quarantine.gif')
@@ -117,21 +137,31 @@ class NipapGui(tk.Frame):
         self.icon_arrow = tk.PhotoImage(file='arrow.gif')
 
     def create_layout(self):
+        """
+        Creates main layout window
+        :return:
+        """
+
+        self.rowconfigure(0, weight=0) # header
+        self.rowconfigure(1, weight=1) # body
+        self.rowconfigure(0, weight=0) # footer
+
         self.create_header()
-
-        self.body = tk.Frame(self, padx=10, pady=10)
-        self.body.grid(column=0, row=2, sticky=tk.N + tk.S + tk.E + tk.W)
-        self.body.columnconfigure(0, weight=1)
-        self.body.rowconfigure(0, weight=1)
-        self.create_tree()
-
+        self.create_body()
         self.create_footer()
 
     def create_header(self):
-        self.header = tk.Frame(self)
-        self.header.grid(column=0, row=1, sticky=tk.E + tk.W)
-        self.header.columnconfigure(1, weight=1)
+        """
+        Creates header in row 0 of main window
+        :return:
+        """
 
+        # Main header Frame
+        self.header = tk.Frame(self)
+        self.header.columnconfigure(1, weight=1) # search bar
+        self.header.grid(column=0, row=0, sticky=tk.E + tk.W)
+
+        # Search Label and Entry field
         self.search_label = tk.Label(self.header, text="Prefix search:")
         self.search_label.grid(row=0, column=0, sticky=tk.E)
 
@@ -139,21 +169,14 @@ class NipapGui(tk.Frame):
         self.search.grid(row=0, column=1, columnspan=2, sticky=tk.E + tk.W)
         self.search.bind('<Return>', self.refresh)
 
-        #self.vrf_label = tk.Label(self.header, text="VRF:")
-        #self.vrf_label.grid(row=0, column=3, sticky=tk.E)
-
-        # Fetch VRFs
-        # self.ipam.get_vrfs()
-        self.vrf_list = self.ipam.vrf_labels
+        # VRF OptionMenu selection
+        #self.vrf_list = self.ipam.vrf_labels
         self.current_vrf.set(list(self.vrf_list.keys())[0])
         self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
         self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
-
-        # self.button_search = tk.Button(self.header, text="Search")
-        # self.button_search.grid(row=0, column=5, rowspan=2, sticky=tk.W + tk.E + tk.N + tk.S)
-
+        # Vlan ID Label and Entry field
         self.vlan_label = tk.Label(self.header, text="Vlan ID:")
         self.vlan_label.grid(row=1, column=0, sticky=tk.E)
 
@@ -161,6 +184,7 @@ class NipapGui(tk.Frame):
         self.vlan_entry.grid(row=1, column=1, sticky=tk.W)
         self.vlan_entry.bind('<Return>', self.refresh)
 
+        # Checkboxes for prefix statuses
         self.checkboxes = tk.Frame(self.header)
         self.checkboxes.grid(row=1, column=3)
         self.chk_reserved = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved)
@@ -170,9 +194,16 @@ class NipapGui(tk.Frame):
         self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine)
         self.chk_quarantine.pack(side=tk.LEFT)
 
+    def create_body(self):
+        self.body = tk.Frame(self, padx=10, pady=10)
+        self.body.grid(column=0, row=1, sticky=tk.N + tk.S + tk.E + tk.W)
+        self.body.columnconfigure(0, weight=1)
+        self.body.rowconfigure(0, weight=1)
+        self.create_tree()
+
     def create_footer(self):
         self.footer = tk.Frame(self)
-        self.footer.grid(column=0, row=3, sticky=tk.E + tk.W)
+        self.footer.grid(column=0, row=2, sticky=tk.E + tk.W)
         self.footer.columnconfigure(1, weight=1)
 
         self.status_label = tk.Label(self.footer, textvariable=self.status)
@@ -201,13 +232,13 @@ class NipapGui(tk.Frame):
         self.tree.column('comment', anchor='w')
         self.tree.heading('comment', anchor='w', text='Comment')
 
-
         # Lookup selected vrf id in vrf_list dict
-        vrf_id = self.vrf_list.get(self.current_vrf.get())
-        self.status.set("Searching %s for '%s'..." % (self.current_vrf.get(), self.search_string.get()))
-        self.ipam.search(self.search_string.get(), vrf_id)
-        self.populate_tree(self.ipam.db)
-        self.status.set("Connected to %s" % self.ipam.host)
+        # vrf_id = self.vrf_list.get(self.current_vrf.get())
+        # self.ipam.search(self.search_string.get(), vrf_id)
+        # self.populate_tree(self.ipam.db)
+        # self.status.set("Connected to %s" % self.ipam.host)
+
+        self.populate_tree(self.prefixes)
 
         # Colorize rows
         # Assigned
@@ -241,6 +272,9 @@ class NipapGui(tk.Frame):
         """
         # Compile pattern from search string
         pattern = re.compile(self.search_string.get(), re.IGNORECASE)
+
+        if not tree_part or 'children' not in tree_part:
+            return
 
         # Iterate trough prefixes from provided part of the tree
         for p, pd in tree_part['children'].items():
@@ -366,14 +400,13 @@ class NipapGui(tk.Frame):
         self.update()
 
     def refresh(self, event=None):
+        self.read_queue()
         self.create_tree()
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
             print("Prefix deleted")
             self.refresh()
-
-q = queue.Queue()
 
 #app = NipapGui(main_queue=q)
 #app.master.title('NIPAP GUI')
