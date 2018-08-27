@@ -4,7 +4,7 @@ from tkinter import ttk
 import re
 import tkinter.messagebox as mbox
 import ipaddress
-
+import os
 import time
 import threading
 import random
@@ -25,6 +25,8 @@ class NipapGui(tk.Frame):
 
     def __init__(self, master=None):
 
+        self.resources_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'resources'))
+
         self.queue = queue.Queue()
         self.lock = threading.Lock()
         self.prefixes = {}
@@ -41,7 +43,7 @@ class NipapGui(tk.Frame):
         top.rowconfigure(0, weight=1)
         top.columnconfigure(0, weight=1)
         top.geometry('1024x768')
-        top.iconbitmap('nipap-gui.ico')
+        top.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
@@ -136,19 +138,28 @@ class NipapGui(tk.Frame):
         Creates references for all images used
         :return:
         """
-        self.icon_host = tk.PhotoImage(file='host.gif')
-        self.icon_host_reserved = tk.PhotoImage(file='host_reserved.gif')
-        self.icon_host_quarantine = tk.PhotoImage(file='host_quarantine.gif')
+        self.icon_host = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'host.gif'))
+        self.icon_host_reserved = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'host_reserved.gif'))
+        self.icon_host_quarantine = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'host_quarantine.gif'))
 
-        self.icon_assignment = tk.PhotoImage(file='assignment.gif')
-        self.icon_assignment_reserved = tk.PhotoImage(file='assignment_reserved.gif')
-        self.icon_assignment_quarantine = tk.PhotoImage(file='assignment_quarantine.gif')
+        self.icon_assignment = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'assignment.gif'))
+        self.icon_assignment_reserved = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'assignment_reserved.gif'))
+        self.icon_assignment_quarantine = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'assignment_quarantine.gif'))
 
-        self.icon_reservation = tk.PhotoImage(file='reservation.gif')
-        self.icon_reservation_reserved = tk.PhotoImage(file='reservation_reserved.gif')
-        self.icon_reservation_quarantine = tk.PhotoImage(file='reservation_quarantine.gif')
+        self.icon_reservation = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'reservation.gif'))
+        self.icon_reservation_reserved = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'reservation_reserved.gif'))
+        self.icon_reservation_quarantine = tk.PhotoImage(
+            file=os.path.join(self.resources_path, 'reservation_quarantine.gif'))
 
-        self.icon_arrow = tk.PhotoImage(file='arrow.gif')
+        self.icon_arrow = tk.PhotoImage(file=os.path.join(self.resources_path, 'arrow.gif'))
 
     def create_layout(self):
         """
@@ -156,9 +167,9 @@ class NipapGui(tk.Frame):
         :return:
         """
 
-        self.rowconfigure(0, weight=0) # header
-        self.rowconfigure(1, weight=1) # body
-        self.rowconfigure(0, weight=0) # footer
+        self.rowconfigure(0, weight=0)  # header
+        self.rowconfigure(1, weight=1)  # body
+        self.rowconfigure(0, weight=0)  # footer
 
         self.create_header()
         self.create_body()
@@ -172,7 +183,7 @@ class NipapGui(tk.Frame):
 
         # Main header Frame
         self.header = tk.Frame(self)
-        self.header.columnconfigure(1, weight=1) # search bar
+        self.header.columnconfigure(1, weight=1)  # search bar
         self.header.grid(column=0, row=0, sticky=tk.E + tk.W)
 
         # Search Label and Entry field
@@ -235,7 +246,8 @@ class NipapGui(tk.Frame):
     def create_tree(self):
         if self.tree:
             self.tree.destroy()
-        self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'), yscrollcommand=self.tree_scroll.set)
+        self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'),
+                                 yscrollcommand=self.tree_scroll.set)
         self.tree_scroll.config(command=self.tree.yview)
 
         self.tree.column('vlan', width=70, anchor='center', stretch=False)
@@ -379,7 +391,7 @@ class NipapGui(tk.Frame):
                 self.tree_menu.add_command(label="Add host")
             self.tree_menu.add_separator()
             if self.tree.tag_has('host', iid):
-                self.tree_menu.add_command(label="SSH", image=self.icon_host, compound = tk.LEFT)
+                self.tree_menu.add_command(label="SSH", image=self.icon_host, compound=tk.LEFT)
                 self.tree_menu.add_command(label="Telnet")
                 self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Delete", activebackground='#770000',
@@ -421,5 +433,6 @@ class NipapGui(tk.Frame):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
             print("Prefix deleted")
             self.refresh()
+
 
 app = GuiThread()
