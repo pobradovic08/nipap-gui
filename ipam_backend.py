@@ -1,6 +1,7 @@
 import pynipap
 import configparser
 import ipaddress
+import threading
 import queue
 from pynipap import VRF, Pool, Prefix
 
@@ -9,6 +10,7 @@ class IpamBackend:
 
     def __init__(self, main_queue):
         self.queue = main_queue
+        self.lock = threading.Lock()
         config = configparser.ConfigParser()
         config.read('config.ini')
         nipap_config = config['nipap']
@@ -40,6 +42,7 @@ class IpamBackend:
         }
 
     def get_vrfs(self):
+        self.lock.acquire()
         vrf_list = VRF.list()
         for vrf in vrf_list:
             self.vrfs[vrf.id] = {
@@ -48,8 +51,10 @@ class IpamBackend:
             }
             label = "VRF %s [%s]" % (vrf.name, vrf.rt) if vrf.rt else "VRF %s" % vrf.name
             self.vrf_labels[label] = str(vrf.id)
+        self.lock.release()
 
     def search(self, search_string='', vrf_id=None):
+        self.lock.acquire()
         # Clear current dictionary
         self._init_db()
 
@@ -72,6 +77,7 @@ class IpamBackend:
         for prefix in search_result:
             #print("Prefix %s" % prefix.prefix)
             self.find_parent(prefix, self.db)
+        self.lock.release()
 
     def find_parent(self, prefix, tree, parent_candidate='', depth=0):
         network = ipaddress.ip_network(prefix.prefix)

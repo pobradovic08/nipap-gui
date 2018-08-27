@@ -26,7 +26,10 @@ class NipapGui(tk.Frame):
     def __init__(self, master=None):
 
         self.queue = queue.Queue()
+        self.lock = threading.Lock()
         self.prefixes = {}
+
+        self.ipam_search_thread = None
 
         # Spawn a thread for nipap initial connect
         self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
@@ -61,9 +64,16 @@ class NipapGui(tk.Frame):
         self.read_queue()
         self.loading.destroy()
         self.create_layout()
+        self.run_search()
+
+    def run_search(self, e=None):
+        # If thread is already running wait for it
+        if self.ipam_search_thread and self.ipam_search_thread.isAlive():
+            print("Search already running")
+            return
+
         self.ipam_search_thread = threading.Thread(target=self.thread_ipam_search)
         self.ipam_search_thread.start()
-
 
     def display_loading(self):
         self.loading = tk.Frame(self)
@@ -81,10 +91,12 @@ class NipapGui(tk.Frame):
         while self.queue.qsize():
             try:
                 msg = self.queue.get()
+                self.lock.acquire()
                 if msg['type'] == 'vrfs':
                     self.vrf_list = msg['data']
                 elif msg['type'] == 'prefixes':
                     self.prefixes = msg['data']
+                self.lock.release()
                 print(msg)
             except queue.Empty:
                 pass
@@ -107,6 +119,7 @@ class NipapGui(tk.Frame):
         vrf_id = self.vrf_list.get(self.current_vrf.get())
         self.ipam.search(self.search_string.get(), vrf_id)
         try:
+            self.status.set("Done.")
             self.event_generate('<<nipap_refresh>>', when='tail')
             self.queue.put({
                 'type': 'prefixes',
@@ -167,10 +180,9 @@ class NipapGui(tk.Frame):
 
         self.search = tk.Entry(self.header, textvariable=self.search_string, font=('TkDefaultFont', 9, 'bold'))
         self.search.grid(row=0, column=1, columnspan=2, sticky=tk.E + tk.W)
-        self.search.bind('<Return>', self.refresh)
+        self.search.bind('<Return>', self.run_search)
 
         # VRF OptionMenu selection
-        #self.vrf_list = self.ipam.vrf_labels
         self.current_vrf.set(list(self.vrf_list.keys())[0])
         self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
         self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
@@ -182,7 +194,7 @@ class NipapGui(tk.Frame):
 
         self.vlan_entry = tk.Entry(self.header)
         self.vlan_entry.grid(row=1, column=1, sticky=tk.W)
-        self.vlan_entry.bind('<Return>', self.refresh)
+        self.vlan_entry.bind('<Return>', self.run_search)
 
         # Checkboxes for prefix statuses
         self.checkboxes = tk.Frame(self.header)
@@ -209,7 +221,7 @@ class NipapGui(tk.Frame):
         self.status_label = tk.Label(self.footer, textvariable=self.status)
         self.status_label.grid(row=0, column=0, sticky=tk.E + tk.S)
 
-        self.refresh_button = tk.Button(self.footer, text='Refresh', command=self.refresh)
+        self.refresh_button = tk.Button(self.footer, text='Refresh', command=self.run_search)
         self.refresh_button.grid(row=0, column=1, sticky=tk.E)
 
         self.quit_button = tk.Button(self.footer, text='Quit', command=self.quit)
@@ -232,13 +244,9 @@ class NipapGui(tk.Frame):
         self.tree.column('comment', anchor='w')
         self.tree.heading('comment', anchor='w', text='Comment')
 
-        # Lookup selected vrf id in vrf_list dict
-        # vrf_id = self.vrf_list.get(self.current_vrf.get())
-        # self.ipam.search(self.search_string.get(), vrf_id)
-        # self.populate_tree(self.ipam.db)
-        # self.status.set("Connected to %s" % self.ipam.host)
-
+        self.lock.acquire()
         self.populate_tree(self.prefixes)
+        self.lock.release()
 
         # Colorize rows
         # Assigned
@@ -282,6 +290,7 @@ class NipapGui(tk.Frame):
             # If prefix data matches the search mark it as selected
             # We need to add tag 'selected' for formatting before adding it to the tree and
             # expand the tree (tree.see()) after adding it to the tree
+            # TODO: remember first selected item and position scrollbar position on it
             selected = True if self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix']) else False
 
             # Predefined prefix tags (prefix type from NIPAP)
