@@ -30,6 +30,7 @@ class NipapGui(tk.Frame):
         self.prefixes = {}
 
         self.ipam_search_thread = None
+        self.tree = None
 
         # Spawn a thread for nipap initial connect
         self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
@@ -183,8 +184,10 @@ class NipapGui(tk.Frame):
         self.search.bind('<Return>', self.run_search)
 
         # VRF OptionMenu selection
+        self.lock.acquire()
         self.current_vrf.set(list(self.vrf_list.keys())[0])
         self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
+        self.lock.release()
         self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
@@ -211,6 +214,8 @@ class NipapGui(tk.Frame):
         self.body.grid(column=0, row=1, sticky=tk.N + tk.S + tk.E + tk.W)
         self.body.columnconfigure(0, weight=1)
         self.body.rowconfigure(0, weight=1)
+        self.tree_scroll = tk.Scrollbar(self.body)
+        self.tree_scroll.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
         self.create_tree()
 
     def create_footer(self):
@@ -228,7 +233,8 @@ class NipapGui(tk.Frame):
         self.quit_button.grid(row=0, column=2, sticky=tk.E)
 
     def create_tree(self):
-        self.tree_scroll = tk.Scrollbar(self.body)
+        if self.tree:
+            self.tree.destroy()
         self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'), yscrollcommand=self.tree_scroll.set)
         self.tree_scroll.config(command=self.tree.yview)
 
@@ -266,7 +272,6 @@ class NipapGui(tk.Frame):
 
         # Display tree
         self.tree.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
-        self.tree_scroll.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
 
         # Bind RMB to show context menu
         self.tree.bind("<Button-3>", self.popup)
@@ -416,9 +421,5 @@ class NipapGui(tk.Frame):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
             print("Prefix deleted")
             self.refresh()
-
-#app = NipapGui(main_queue=q)
-#app.master.title('NIPAP GUI')
-#app.mainloop()
 
 app = GuiThread()
