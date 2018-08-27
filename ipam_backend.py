@@ -1,12 +1,14 @@
 import pynipap
 import configparser
 import ipaddress
+import queue
 from pynipap import VRF, Pool, Prefix
 
 
 class IpamBackend:
 
-    def __init__(self):
+    def __init__(self, main_queue):
+        self.queue = main_queue
         config = configparser.ConfigParser()
         config.read('config.ini')
         nipap_config = config['nipap']
@@ -26,6 +28,7 @@ class IpamBackend:
             pynipap.AuthOptions({
                 'authoritative_source': 'nipap-gui'
             })
+            self.get_vrfs()
 
     def _init_db(self):
         """

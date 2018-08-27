@@ -5,12 +5,31 @@ import re
 import tkinter.messagebox as mbox
 import ipaddress
 
+import time
+import threading
+import random
+import queue
+
 from ipam_backend import IpamBackend
 
 
-class Application(tk.Frame):
+class GuiThread:
 
-    def __init__(self, master=None):
+    def __init__(self):
+        self.queue = queue.Queue()
+        app = NipapGui(main_queue=q)
+        app.master.title('NIPAP GUI')
+        app.mainloop()
+
+
+class NipapGui(tk.Frame):
+
+    def __init__(self, master=None, main_queue=None):
+
+        self.queue = queue.Queue()
+
+        self.ipam_connect_thread = threading.Thread(target=self.ipam_backend_connect)
+        self.ipam_connect_thread.start()
 
         tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
         top = self.winfo_toplevel()
@@ -32,9 +51,55 @@ class Application(tk.Frame):
         self.filter_assigned = tk.IntVar(value=1)
         self.filter_quarantine = tk.IntVar(value=1)
 
-        self.ipam = IpamBackend()
+        self.bind('<<nipap_connected>>', self.test)
 
-        self.create_layout()
+        #self.ipam = IpamBackend(self.queue)
+        self.display_loading()
+        #self.periodicCall()
+
+        #self.create_layout()
+
+    def test(self, e):
+        self.wait_for_connection()
+
+    def periodicCall(self):
+        """
+        Check every 200 ms if there is something new in the queue.
+        """
+        self.wait_for_connection()
+        self.master.after(200, self.periodicCall)
+
+    def display_loading(self):
+        self.loading = tk.Frame(self)
+        self.loading.rowconfigure(0, weight=1)
+        self.loading.columnconfigure(0, weight=1)
+        label = tk.Label(self.loading, text="Connecting to server...")
+        label.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
+        self.pb = tk.ttk.Progressbar(self.loading, mode='indeterminate')
+        self.pb.start()
+        self.pb.grid(row=1, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
+        self.loading.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
+
+    def wait_for_connection(self):
+        while self.queue.qsize():
+            try:
+                msg = self.queue.get()
+                if msg == 'connected':
+                    self.loading.destroy()
+                    self.create_layout()
+                elif msg == 'refresh':
+                    self.refresh()
+                print(msg)
+            except queue.Empty:
+                pass
+
+    def ipam_backend_connect(self):
+        self.ipam = IpamBackend(self.queue)
+        try:
+            self.event_generate('<<nipap_connected>>', when='tail')
+            self.queue.put("connected")
+        except tk.TclError:
+            return
 
     def define_icons(self):
         self.icon_host = tk.PhotoImage(file='host.gif')
@@ -78,7 +143,7 @@ class Application(tk.Frame):
         #self.vrf_label.grid(row=0, column=3, sticky=tk.E)
 
         # Fetch VRFs
-        self.ipam.get_vrfs()
+        # self.ipam.get_vrfs()
         self.vrf_list = self.ipam.vrf_labels
         self.current_vrf.set(list(self.vrf_list.keys())[0])
         self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
@@ -308,7 +373,10 @@ class Application(tk.Frame):
             print("Prefix deleted")
             self.refresh()
 
+q = queue.Queue()
 
-app = Application()
-app.master.title('NIPAP GUI')
-app.mainloop()
+#app = NipapGui(main_queue=q)
+#app.master.title('NIPAP GUI')
+#app.mainloop()
+
+app = GuiThread()
