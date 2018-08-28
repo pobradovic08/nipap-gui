@@ -53,31 +53,67 @@ class IpamBackend:
             self.vrf_labels[label] = str(vrf.id)
         self.lock.release()
 
-    def search(self, search_string='', vrf_id=None):
+    def search(self, search_string='', vrf_id=None, filters = None):
         self.lock.acquire()
         # Clear current dictionary
         self._init_db()
 
-        # Build VRF query based on `vrf_id` to be used as `extra_query` param
+        #Build VRF query based on `vrf_id` to be used as `extra_query` param
         vrf_q = None if not vrf_id else {
             'operator': 'equals',
             'val1': 'vrf_id',
             'val2': vrf_id
         }
 
-        #Debug
-        #print(vrf_q)
+        # Build status filters
+        filter_q = self.status_filter_build(filters)
+
+        # Combine vrf_q and filter_q
+        if vrf_q:
+            extra_q = vrf_q if not filter_q else {
+                'operator': 'and',
+                'val1': vrf_q,
+                'val2': filter_q
+            }
+        else:
+            extra_q = filter_q
 
         search_result = Prefix.smart_search(search_string, search_options={
             'parents_depth': -1,
             'children_depth': -1,
             'max_result': 0
-        }, extra_query=vrf_q)['result']
+        }, extra_query=extra_q)['result']
 
         for prefix in search_result:
             #print("Prefix %s" % prefix.prefix)
             self.find_parent(prefix, self.db)
         self.lock.release()
+
+    def status_filter_build(self, type_array, query=None):
+        filtered_array = list(filter(lambda item: item in ('reserved', 'assigned', 'quarantine'), type_array))
+        if len(filtered_array) == 3:
+           return None
+        if not filtered_array:
+            return query
+
+        item = filtered_array.pop(0)
+
+        tmp_query = {
+            'operator': 'equals',
+            'val1': 'status',
+            'val2': item
+        }
+
+        if not query:
+            query = tmp_query
+        else:
+            query = {
+                'operator': 'or',
+                'val1': query,
+                'val2': tmp_query
+            }
+
+        return self.status_filter_build(filtered_array, query)
 
     def find_parent(self, prefix, tree, parent_candidate='', depth=0):
         network = ipaddress.ip_network(prefix.prefix)

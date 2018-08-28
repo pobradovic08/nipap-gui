@@ -120,7 +120,17 @@ class NipapGui(tk.Frame):
         self.status.set("Searching %s for '%s'..." % (self.current_vrf.get(), self.search_string.get()))
         # Lookup selected vrf id in vrf_list dict
         vrf_id = self.vrf_list.get(self.current_vrf.get())
-        self.ipam.search(self.search_string.get(), vrf_id)
+
+        # Create status filters
+        filters = []
+        if self.filter_reserved.get():
+            filters.append('reserved')
+        if self.filter_assigned.get():
+            filters.append('assigned')
+        if self.filter_quarantine.get():
+            filters.append('quarantine')
+
+        self.ipam.search(self.search_string.get(), vrf_id, filters)
         try:
             self.status.set("Done.")
             self.event_generate('<<nipap_refresh>>', when='tail')
@@ -132,6 +142,28 @@ class NipapGui(tk.Frame):
         except tk.TclError as e:
             print(e)
             return
+
+    def get_search_string(self):
+        search_string = self.search_string.get()
+
+        filter_array = []
+
+        if self.filter_reserved.get():
+            filter_array.append('status=reserved')
+        if self.filter_assigned.get():
+            filter_array.append('status=assigned')
+        if self.filter_quarantine.get():
+            filter_array.append('status=quarantine')
+
+        filter_string = "%s" % ' or '.join(filter_array)
+
+        if search_string:
+            search_string = ' and '.join([search_string, filter_string])
+        else:
+            search_string = filter_string
+        print(search_string)
+        return search_string
+
 
     def define_icons(self):
         """
@@ -197,7 +229,7 @@ class NipapGui(tk.Frame):
         # VRF OptionMenu selection
         self.lock.acquire()
         self.current_vrf.set(list(self.vrf_list.keys())[0])
-        self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.refresh)
+        self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.run_search)
         self.lock.release()
         self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
@@ -213,11 +245,14 @@ class NipapGui(tk.Frame):
         # Checkboxes for prefix statuses
         self.checkboxes = tk.Frame(self.header)
         self.checkboxes.grid(row=1, column=3)
-        self.chk_reserved = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved)
+        self.chk_reserved = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved,
+                                           command=self.run_search)
         self.chk_reserved.pack(side=tk.LEFT)
-        self.chk_assigned = tk.Checkbutton(self.checkboxes, text="Assigned", variable=self.filter_assigned)
+        self.chk_assigned = tk.Checkbutton(self.checkboxes, text="Assigned", variable=self.filter_assigned,
+                                           command=self.run_search)
         self.chk_assigned.pack(side=tk.LEFT)
-        self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine)
+        self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine,
+                                             command=self.run_search)
         self.chk_quarantine.pack(side=tk.LEFT)
 
     def create_body(self):
