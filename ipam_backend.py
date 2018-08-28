@@ -8,12 +8,14 @@ from pynipap import VRF, Pool, Prefix
 
 class IpamBackend:
 
-    def __init__(self, main_queue):
+    def __init__(self, main_queue, cfg):
         self.queue = main_queue
         self.lock = threading.Lock()
+        # TODO: clean unused
         config = configparser.ConfigParser()
         config.read('config.ini')
-        nipap_config = config['nipap']
+        #nipap_config = config['nipap']
+        nipap_config = cfg
         self.host = ""
         self.vrfs = {}
         self.vrf_labels = {}

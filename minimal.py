@@ -9,6 +9,7 @@ import time
 import threading
 import random
 import queue
+import configparser
 
 from ipam_backend import IpamBackend
 
@@ -33,10 +34,13 @@ class NipapGui(tk.Frame):
 
         self.ipam_search_thread = None
         self.tree = None
+        self.error = {}
 
-        # Spawn a thread for nipap initial connect
-        self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
-        self.ipam_connect_thread.start()
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        self.nipap_config = config['nipap']
+
+        self.connect_to_server()
 
         tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
         top = self.winfo_toplevel()
@@ -52,6 +56,7 @@ class NipapGui(tk.Frame):
 
         # Can't call before creating root window
         self.status = tk.StringVar()
+        self.loading_string = tk.StringVar()
         self.search_string = tk.StringVar()
         self.current_vrf = tk.StringVar()
         self.filter_reserved = tk.IntVar(value=1)
@@ -60,8 +65,14 @@ class NipapGui(tk.Frame):
 
         self.bind('<<nipap_connected>>', self.connected)
         self.bind('<<nipap_refresh>>', self.refresh)
+        self.bind('<<nipap_error>>', self.handle_error)
 
         self.display_loading()
+
+    def connect_to_server(self):
+        # Spawn a thread for nipap initial connect
+        self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
+        self.ipam_connect_thread.start()
 
     def connected(self, e):
         self.read_queue()
@@ -84,8 +95,9 @@ class NipapGui(tk.Frame):
         # self.loading.columnconfigure(0, weight=1)
         self.loading.grid(row=0, column=0)
 
-        label = tk.Label(self.loading, text="Connecting to server...")
-        label.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
+        self.loading_string.set("Connecting to %s ..." % self.nipap_config['host'])
+        self.loading_label = tk.Label(self.loading, textvariable=self.loading_string)
+        self.loading_label.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
         self.pb = tk.ttk.Progressbar(self.loading, mode='indeterminate')
         self.pb.start()
         self.pb.grid(row=1, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
@@ -99,14 +111,27 @@ class NipapGui(tk.Frame):
                     self.vrf_list = msg['data']
                 elif msg['type'] == 'prefixes':
                     self.prefixes = msg['data']
+                elif msg['type'] == 'error':
+                    self.error['msg'] = msg['data']
+                    self.error['callback'] = msg['callback']
                 self.lock.release()
                 print(msg)
             except queue.Empty:
                 pass
 
     def thread_ipam_connect(self):
-        self.ipam = IpamBackend(self.queue)
         try:
+            try:
+                self.ipam = IpamBackend(self.queue, self.nipap_config)
+            except Exception as e:
+                self.event_generate('<<nipap_error>>', when='tail')
+                self.queue.put({
+                    'type': 'error',
+                    'data': e,
+                    'callback': self.connect_to_server,
+                    'status': 'error'
+                })
+                return
             self.event_generate('<<nipap_connected>>', when='tail')
             self.queue.put({
                 'type': 'vrfs',
@@ -130,7 +155,17 @@ class NipapGui(tk.Frame):
         if self.filter_quarantine.get():
             filters.append('quarantine')
 
-        self.ipam.search(self.search_string.get(), vrf_id, filters)
+        try:
+            self.ipam.search(self.search_string.get(), vrf_id, filters)
+        except Exception as e:
+            self.event_generate('<<nipap_error>>', when='tail')
+            self.queue.put({
+                'type': 'error',
+                'data': e,
+                'callback': self.run_search,
+                'status': 'error'
+            })
+            return
         try:
             self.status.set("Done.")
             self.event_generate('<<nipap_refresh>>', when='tail')
@@ -163,6 +198,29 @@ class NipapGui(tk.Frame):
             search_string = filter_string
         print(search_string)
         return search_string
+
+    def handle_error(self, event):
+        self.read_queue()
+        if self.error:
+            # If we're on loading screen
+            if self.loading.winfo_exists():
+                self.loading_string.set("Connection failed.")
+                self.pb.stop()
+                if mbox.askretrycancel("Error", self.error['msg']) and not self.ipam_connect_thread.isAlive():
+                    self.loading_string.set("Connecting to %s ..." % self.nipap_config['host'])
+                    if 'callback' in self.error:
+                        self.error['callback']()
+                    self.pb.start()
+                else:
+                    self.quit()
+            else:
+                self.status.set(self.error['msg'])
+                if mbox.askretrycancel("Error", self.error['msg']):
+                    if 'callback' in self.error:
+                        self.error['callback']()
+                else:
+                    self.quit()
+        self.error = {}
 
 
     def define_icons(self):
