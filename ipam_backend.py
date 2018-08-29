@@ -145,3 +145,41 @@ class IpamBackend:
                     b.broadcast_address >= a.broadcast_address)
         except AttributeError:
             raise TypeError(f"Unable to test subnet containment "f"between {a} and {b}")
+
+    @staticmethod
+    def prefix_find_gaps(from_prefix, to_prefix, missing_list=None):
+        """
+        Recursively find prefixes to fill the gap between two subnets
+
+        :param from_prefix: IPv4Network
+        :param to_prefix: IPv4Network
+        :param missing_list:
+        :return:
+        """
+
+        if missing_list is None:
+            missing_list = []
+        cidr = -1
+        next_ip = from_prefix.broadcast_address + 1
+        if next_ip > to_prefix.network_address:
+            print("From higher than to.")
+            return []
+        if next_ip == to_prefix.network_address:
+            return missing_list
+
+        for cidr_candidate in range(32, 0, -1):
+            try:
+                prefix_candidate = ipaddress.IPv4Network("%s/%d" % (next_ip, cidr_candidate))
+                if to_prefix.overlaps(prefix_candidate):
+                    raise ValueError()
+            except ValueError:
+                cidr = cidr_candidate + 1
+                break
+
+        if cidr == -1:
+            return False
+        missing_prefix = ipaddress.IPv4Network("%s/%d" % (next_ip, cidr))
+        print("Missing: %s" % missing_prefix)
+        missing_list.append(missing_prefix)
+
+        return IpamBackend.prefix_find_gaps(missing_prefix, to_prefix, missing_list)
