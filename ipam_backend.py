@@ -151,14 +151,21 @@ class IpamBackend:
         """
         Recursively find prefixes to fill the gap between two subnets
 
-        :param from_prefix: IPv4Network
-        :param to_prefix: IPv4Network
+        :param from_prefix: IPv4Network or string
+        :param to_prefix: IPv4Network or string
         :param missing_list:
-        :return:
+        :return: array of strings representing IP prefix
         """
+
+        if not isinstance(from_prefix, ipaddress.IPv4Network):
+            from_prefix = ipaddress.IPv4Network(from_prefix)
+
+        if not isinstance(to_prefix, ipaddress.IPv4Network):
+            to_prefix = ipaddress.IPv4Network(to_prefix)
 
         if missing_list is None:
             missing_list = []
+
         cidr = -1
         next_ip = from_prefix.broadcast_address + 1
         if next_ip > to_prefix.network_address:
@@ -179,7 +186,124 @@ class IpamBackend:
         if cidr == -1:
             return False
         missing_prefix = ipaddress.IPv4Network("%s/%d" % (next_ip, cidr))
-        print("Missing: %s" % missing_prefix)
-        missing_list.append(missing_prefix)
+        #print("Missing: %s" % missing_prefix)
+        missing_list.append(str(missing_prefix))
 
         return IpamBackend.prefix_find_gaps(missing_prefix, to_prefix, missing_list)
+
+    @staticmethod
+    def prefix_first_gap(supernet, first_prefix):
+        if not isinstance(supernet, ipaddress.IPv4Network):
+            supernet = ipaddress.IPv4Network(supernet)
+
+        if not isinstance(first_prefix, ipaddress.IPv4Network):
+            first_prefix = ipaddress.IPv4Network(first_prefix)
+
+        start_ip = supernet.network_address
+
+        if start_ip == first_prefix.network_address:
+            return None
+
+        if IpamBackend._is_subnet_of(first_prefix, supernet):
+            cidr = -1
+            for cidr_candidate in range(32, 0, -1):
+                try:
+                    prefix_candidate = ipaddress.IPv4Network("%s/%d" % (start_ip, cidr_candidate))
+                    if first_prefix.overlaps(prefix_candidate):
+                        raise ValueError()
+                except ValueError:
+                    cidr = cidr_candidate + 1
+                    break
+
+            if cidr == -1:
+                return None
+
+            missing_prefix = ipaddress.IPv4Network("%s/%d" % (start_ip, cidr))
+            return str(missing_prefix)
+
+    @staticmethod
+    def prefix_last_gap(supernet, last_prefix):
+        if not isinstance(supernet, ipaddress.IPv4Network):
+            supernet = ipaddress.IPv4Network(supernet)
+
+        if not isinstance(last_prefix, ipaddress.IPv4Network):
+            last_prefix = ipaddress.IPv4Network(last_prefix)
+
+        end_ip = supernet.broadcast_address
+
+        if end_ip == last_prefix.broadcast_address:
+            return None
+
+        if IpamBackend._is_subnet_of(last_prefix, supernet):
+            cidr = -1
+            for cidr_candidate in range(32, 0, -1):
+                try:
+                    prefix_candidate = ipaddress.IPv4Network("%s/%d" % (end_ip, cidr_candidate), strict=False)
+                    if last_prefix.overlaps(prefix_candidate):
+                        raise ValueError()
+                except ValueError:
+                    cidr = cidr_candidate + 1
+                    break
+
+            if cidr == -1:
+                return None
+
+            missing_prefix = ipaddress.IPv4Network("%s/%d" % (end_ip, cidr), strict=False)
+            return str(missing_prefix)
+
+    @staticmethod
+    def prefix_fill_missing(prefix_list, missing_list=None):
+        """
+
+        :param prefix_list:
+        :param missing_list:
+        :return:
+        """
+        if missing_list is None:
+            missing_list = []
+        if len(prefix_list) < 2:
+            return missing_list
+
+        prefix_list = sorted(prefix_list, key=lambda prefix: ipaddress.IPv4Network(prefix))
+        print(prefix_list)
+        gaps = IpamBackend.prefix_find_gaps(prefix_list[0], prefix_list[1])
+        if gaps:
+            prefix_list.extend(gaps)
+            missing_list.extend(gaps)
+
+        return IpamBackend.prefix_fill_missing(prefix_list[1:], missing_list)
+
+    @staticmethod
+    def supernet_fill_gaps(supernet, prefix_list):
+        if not prefix_list:
+            return None
+
+        if not isinstance(supernet, ipaddress.IPv4Network):
+            supernet = ipaddress.IPv4Network(supernet)
+
+        prefix_list = sorted(prefix_list, key=lambda prefix: ipaddress.IPv4Network(prefix))
+        first_gap = IpamBackend.prefix_first_gap(supernet, prefix_list[0])
+        if first_gap:
+            prefix_list.append(first_gap)
+            prefix_list = sorted(prefix_list, key=lambda prefix: ipaddress.IPv4Network(prefix))
+
+        last_gap = IpamBackend.prefix_last_gap(supernet, prefix_list[-1])
+        if last_gap:
+            prefix_list.append(last_gap)
+            # No need to sort, because it's on the end of the list anyway
+
+        missing = IpamBackend.prefix_fill_missing(prefix_list)
+        prefix_list.extend(missing)
+        return sorted(prefix_list, key=lambda prefix: ipaddress.IPv4Network(prefix))
+
+    @staticmethod
+    def _is_subnet_of(a, b):
+        try:
+            # Always false if one is v4 and the other is v6.
+            if a._version != b._version:
+                raise TypeError("%s and %s are not of the same version" % (a, b))
+            return (b.network_address <= a.network_address and
+                    b.broadcast_address >= a.broadcast_address)
+        except AttributeError:
+            raise TypeError("Unable to test subnet containment "
+                            "between %s and %s" % (a, b))
