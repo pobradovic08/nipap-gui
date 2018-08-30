@@ -397,6 +397,12 @@ class NipapGui(tk.Frame):
         # Iterate trough prefixes from provided part of the tree
         for p, pd in tree_part['children'].items():
 
+            if pd['prefix'] is None:
+                # Insert item into the tree
+                self.tree.insert(pd['parent'], 'end', iid=p, text=p,
+                                 values=('', '', 'Free', ''), tags=['free'])
+                continue
+
             # If prefix data matches the search mark it as selected
             # We need to add tag 'selected' for formatting before adding it to the tree and
             # expand the tree (tree.see()) after adding it to the tree
