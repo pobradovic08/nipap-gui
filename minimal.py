@@ -1,13 +1,10 @@
 import tkinter as tk
-import tkinter.font as tkf
 from tkinter import ttk
 import re
 import tkinter.messagebox as mbox
 import ipaddress
 import os
-import time
 import threading
-import random
 import queue
 import configparser
 
@@ -93,8 +90,6 @@ class NipapGui(tk.Frame):
 
     def display_loading(self):
         self.loading = tk.Frame(self)
-        # self.loading.rowconfigure(0, weight=1)
-        # self.loading.columnconfigure(0, weight=1)
         self.loading.grid(row=0, column=0)
 
         self.loading_string.set("Connecting to %s ..." % self.nipap_config['host'])
@@ -393,6 +388,7 @@ class NipapGui(tk.Frame):
         :param tree_part:
         :return:
         """
+        # TODO: remember first selected item and position scrollbar position on it
         # Compile pattern from search string
         pattern = re.compile(self.search_string.get(), re.IGNORECASE)
 
@@ -408,20 +404,14 @@ class NipapGui(tk.Frame):
                                  values=('', '', 'Free', ''), tags=['free'])
                 continue
 
-            # If prefix data matches the search mark it as selected
-            # We need to add tag 'selected' for formatting before adding it to the tree and
-            # expand the tree (tree.see()) after adding it to the tree
-            # TODO: remember first selected item and position scrollbar position on it
-            selected = False
-            if (self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix'])) or pd['selected']:
-                selected = True
-
             # Predefined prefix tags (prefix type from NIPAP)
             default_tag = "%s_%s" % (pd['prefix'].type, pd['prefix'].status)
             prefix_tags = [default_tag, pd['prefix'].type]
 
-            # Append selected tag if needed
-            if selected:
+            # If prefix data matches the search mark it as selected
+            # We need to add tag 'selected' for formatting before adding it to the tree and
+            # expand the tree (tree.see()) after adding it to the tree
+            if pd['selected']:
                 prefix_tags.append('selected')
 
             # Insert item into the tree
@@ -433,36 +423,12 @@ class NipapGui(tk.Frame):
             ), tags=prefix_tags)
 
             # If prefix matches search criteria expand tree so prefix is visible
-            if selected:
+            if pd['selected']:
                 self.tree.see(pd['prefix'].prefix)
 
             # Call itself with prefix children
             if pd['children']:
                 self.populate_tree(pd)
-
-    def search_matches_prefix(self, pattern, prefix):
-        """
-        Returns True if any of defined prefix attributes matches search criteria
-        :param pattern: Compiled re expression
-        :param prefix: pynipap Prefix object
-        :return:
-        """
-
-        # If the search string is empty or none don't mark any prefixes
-        if not self.search_string.get():
-            return False
-
-        # List of values to check
-        match_against = [
-            prefix.prefix,
-            prefix.description,
-            prefix.comment
-        ]
-
-        # Search for `pattern` in list of values
-        for value in match_against:
-            if value and re.search(pattern, value):
-                return True
 
     def popup(self, event):
         """

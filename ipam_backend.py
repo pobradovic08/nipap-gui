@@ -2,6 +2,7 @@ import pynipap
 import configparser
 import ipaddress
 import threading
+import re
 import queue
 from pynipap import VRF, Pool, Prefix
 
@@ -19,6 +20,10 @@ class IpamBackend:
         self.host = ""
         self.vrfs = {}
         self.vrf_labels = {}
+
+        self.search_string = ''
+        self.search_pattern = None
+
         self._init_db()
         if 'host' in nipap_config:
             self.host = nipap_config['host']
@@ -59,6 +64,10 @@ class IpamBackend:
         self.lock.acquire()
         # Clear current dictionary
         self._init_db()
+
+        # Compile search string
+        self.search_string = search_string
+        self.search_pattern = re.compile(self.search_string, re.IGNORECASE)
 
         #Build VRF query based on `vrf_id` to be used as `extra_query` param
         vrf_q = None if not vrf_id else {
@@ -143,7 +152,7 @@ class IpamBackend:
             tree['children'][prefix.prefix] = {
                 'parent': parent_candidate,
                 'prefix': prefix,
-                'selected': False,
+                'selected': self.search_matches_prefix(prefix),
                 'children': {}
             }
             #print("%s -> %s" % (prefix.prefix, parent_candidate))
@@ -155,6 +164,29 @@ class IpamBackend:
                     return self.find_parent(prefix, tree['children'][p], p, depth + 1)
             except TypeError:
                 continue
+
+    def search_matches_prefix(self, prefix):
+        """
+        Returns True if any of defined prefix attributes matches search criteria
+        :param prefix: pynipap Prefix object
+        :return:
+        """
+
+        # If the search string is empty or none don't mark any prefixes
+        if not self.search_string:
+            return False
+
+        # List of values to check
+        match_against = [
+            prefix.prefix,
+            prefix.description,
+            prefix.comment
+        ]
+
+        # Search for `pattern` in list of values
+        for value in match_against:
+            if value and re.search(self.search_pattern, value):
+                return True
 
     @staticmethod
     def is_subnet_of(a, b):
