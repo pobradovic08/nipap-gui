@@ -112,7 +112,7 @@ class NipapGui(tk.Frame):
                     self.error['msg'] = msg['data']
                     self.error['callback'] = msg['callback']
                 self.lock.release()
-                print(msg)
+                #print(msg)
             except queue.Empty:
                 pass
 
@@ -193,7 +193,7 @@ class NipapGui(tk.Frame):
             search_string = ' and '.join([search_string, filter_string])
         else:
             search_string = filter_string
-        print(search_string)
+        #print(search_string)
         return search_string
 
     def handle_error(self, event):
@@ -449,21 +449,22 @@ class NipapGui(tk.Frame):
             # Define menu items
             if self.tree.tag_has('reservation', iid):
                 self.tree_menu.add_command(label="Show free prefixes", command=lambda: self.show_free(prefix))
+            if self.tree.tag_has('reservation', iid):
+                self.tree_menu.add_command(label="Add prefix")
+            if self.tree.tag_has('assignment', iid):
+                self.tree_menu.add_command(label="Add host")
+            # Change prefix status
+            self.tree_status_menu = tk.Menu(tearoff=0)
+            self.tree_status_menu.add_command(label="Assigned")
+            self.tree_status_menu.add_command(label="Reserved")
+            self.tree_status_menu.add_command(label="Quarantine")
+            self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Copy IP", command=lambda: self.copy_to_clipboard(prefix, 'ip'))
             self.tree_menu.add_command(label="Copy netmask", command=lambda: self.copy_to_clipboard(prefix, 'mask'))
             self.tree_menu.add_command(label="Copy CIDR", command=lambda: self.copy_to_clipboard(prefix, 'cidr'))
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Edit")
-            self.tree_status_menu = tk.Menu(tearoff=0)
-            self.tree_status_menu.add_command(label="Assigned")
-            self.tree_status_menu.add_command(label="Reserved")
-            self.tree_status_menu.add_command(label="Quarantine")
-            self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
-            if self.tree.tag_has('reservation', iid):
-                self.tree_menu.add_command(label="Add prefix")
-            if self.tree.tag_has('assignment', iid):
-                self.tree_menu.add_command(label="Add host")
             self.tree_menu.add_separator()
             if self.tree.tag_has('host', iid):
                 self.tree_menu.add_command(label="SSH", image=self.icon_host, compound=tk.LEFT)

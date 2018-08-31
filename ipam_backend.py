@@ -12,19 +12,16 @@ class IpamBackend:
     def __init__(self, main_queue, cfg):
         self.queue = main_queue
         self.lock = threading.Lock()
-        # TODO: clean unused
-        config = configparser.ConfigParser()
-        config.read('config.ini')
-        #nipap_config = config['nipap']
-        nipap_config = cfg
         self.host = ""
         self.vrfs = {}
         self.vrf_labels = {}
 
         self.search_string = ''
         self.search_pattern = None
-
         self._init_db()
+
+
+        nipap_config = cfg
         if 'host' in nipap_config:
             self.host = nipap_config['host']
             nipap_url = "http://%s:%s@%s:%d/XMLRPC" % (
@@ -99,10 +96,6 @@ class IpamBackend:
             #print("Prefix %s" % prefix.prefix)
             self.find_parent(prefix, self.db)
 
-        #TODO: Do something with this...
-        #if search_string == '':
-        #    for prefix, data in self.db['children'].items():
-        #       self.fill_blanks(data)
         self.lock.release()
 
     def fill_blanks(self, prefix_list):
@@ -227,6 +220,7 @@ class IpamBackend:
         if next_ip == to_prefix.network_address:
             return missing_list
 
+        # TODO: If IPv6 start CIDR from 64
         for cidr_candidate in range(32, 0, -1):
             try:
                 prefix_candidate = ipaddress.ip_network("%s/%d" % (next_ip, cidr_candidate))
@@ -259,6 +253,7 @@ class IpamBackend:
 
         if IpamBackend.is_subnet_of(first_prefix, supernet):
             cidr = -1
+            # TODO: If IPv6 start CIDR from 64
             for cidr_candidate in range(32, 0, -1):
                 try:
                     prefix_candidate = ipaddress.ip_network("%s/%d" % (start_ip, cidr_candidate))
@@ -289,6 +284,7 @@ class IpamBackend:
 
         if IpamBackend.is_subnet_of(last_prefix, supernet):
             cidr = -1
+            #TODO: If IPv6 start CIDR from 64
             for cidr_candidate in range(32, 0, -1):
                 try:
                     prefix_candidate = ipaddress.ip_network("%s/%d" % (end_ip, cidr_candidate), strict=False)
