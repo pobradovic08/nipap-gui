@@ -354,7 +354,7 @@ class NipapGui(tk.Frame):
     def create_tree(self):
         if self.tree:
             self.tree.destroy()
-        self.tree = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'descr', 'comment'),
+        self.tree = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
                                  yscrollcommand=self.tree_scroll.set, style='Nipap.Treeview')
         self.tree_scroll.config(command=self.tree.yview)
 
@@ -366,6 +366,9 @@ class NipapGui(tk.Frame):
 
         self.tree.column('tags', anchor='center')
         self.tree.heading('tags', text='Tags')
+
+        self.tree.column('node', anchor='center')
+        self.tree.heading('node', text='Node')
 
         self.tree.column('descr', anchor='w')
         self.tree.heading('descr', anchor='w', text='Descriptuon')
@@ -442,6 +445,7 @@ class NipapGui(tk.Frame):
                 pd['prefix'].vlan or '',
                 "%2.1f%%" % (100 * pd['prefix'].used_addresses / pd['prefix'].total_addresses),
                 ', '.join(pd['prefix'].tags.keys()),
+                pd['prefix'].node or '',
                 pd['prefix'].description or '',
                 pd['prefix'].comment or ''
             ), tags=prefix_tags)
