@@ -107,6 +107,7 @@ class IpamBackend:
                 prefix_list['children'][p] = {
                     'parent': prefix_list['parent'],
                     'prefix': None,
+                    'selected': False,
                     'children': {}
                 }
 
@@ -142,6 +143,7 @@ class IpamBackend:
             tree['children'][prefix.prefix] = {
                 'parent': parent_candidate,
                 'prefix': prefix,
+                'selected': False,
                 'children': {}
             }
             #print("%s -> %s" % (prefix.prefix, parent_candidate))

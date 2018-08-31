@@ -31,6 +31,7 @@ class NipapGui(tk.Frame):
         self.queue = queue.Queue()
         self.lock = threading.Lock()
         self.prefixes = {}
+        self.vrf_list = {}
 
         self.ipam_search_thread = None
         self.tree = None
@@ -39,8 +40,6 @@ class NipapGui(tk.Frame):
         config = configparser.ConfigParser()
         config.read('config.ini')
         self.nipap_config = config['nipap']
-
-        self.connect_to_server()
 
         tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
         top = self.winfo_toplevel()
@@ -53,6 +52,8 @@ class NipapGui(tk.Frame):
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
 
         self.define_icons()
+        style = ttk.Style()
+        style.configure('Nipap.Treeview', font=('TkDefaultFont', 8, 'normal'))
 
         # Can't call before creating root window
         self.status = tk.StringVar()
@@ -67,6 +68,7 @@ class NipapGui(tk.Frame):
         self.bind('<<nipap_refresh>>', self.refresh)
         self.bind('<<nipap_error>>', self.handle_error)
 
+        self.connect_to_server()
         self.display_loading()
 
     def connect_to_server(self):
@@ -222,7 +224,6 @@ class NipapGui(tk.Frame):
                     self.quit()
         self.error = {}
 
-
     def define_icons(self):
         """
         Creates references for all images used
@@ -342,7 +343,7 @@ class NipapGui(tk.Frame):
         if self.tree:
             self.tree.destroy()
         self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'),
-                                 yscrollcommand=self.tree_scroll.set)
+                                 yscrollcommand=self.tree_scroll.set, style='Nipap.Treeview')
         self.tree_scroll.config(command=self.tree.yview)
 
         self.tree.column('vlan', width=70, anchor='center', stretch=False)
@@ -411,7 +412,9 @@ class NipapGui(tk.Frame):
             # We need to add tag 'selected' for formatting before adding it to the tree and
             # expand the tree (tree.see()) after adding it to the tree
             # TODO: remember first selected item and position scrollbar position on it
-            selected = True if self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix']) else False
+            selected = False
+            if (self.search_string.get() and self.search_matches_prefix(pattern, pd['prefix'])) or pd['selected']:
+                selected = True
 
             # Predefined prefix tags (prefix type from NIPAP)
             default_tag = "%s_%s" % (pd['prefix'].type, pd['prefix'].status)
@@ -519,6 +522,9 @@ class NipapGui(tk.Frame):
                     'prefix': None,
                     'children': {}
                 }
+
+        p['selected'] = True
+
         self.create_tree()
         iid_children = self.tree.get_children([prefix])
         if iid_children:
