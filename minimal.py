@@ -28,6 +28,8 @@ class NipapGui(tk.Frame):
         self.queue = queue.Queue()
         self.lock = threading.Lock()
         self.prefixes = {}
+        self.prefixes_v4 = {}
+        self.prefixes_v6 = {}
         self.vrf_list = {}
 
         self.ipam_search_thread = None
@@ -316,7 +318,22 @@ class NipapGui(tk.Frame):
         self.body.grid(column=0, row=1, sticky=tk.N + tk.S + tk.E + tk.W)
         self.body.columnconfigure(0, weight=1)
         self.body.rowconfigure(0, weight=1)
-        self.tree_scroll = tk.Scrollbar(self.body)
+        self.tabs = ttk.Notebook(self.body)
+        self.tabs.grid(sticky=tk.N + tk.S + tk.E + tk.W)
+
+        self.ipv4 = tk.Frame(self.tabs)
+        self.ipv4.columnconfigure(0, weight=1)
+        self.ipv4.rowconfigure(0, weight=1)
+        self.ipv4.grid(sticky=tk.N + tk.S + tk.E + tk.W)
+        self.tabs.add(self.ipv4, text="IPv4 prefixes")
+
+        self.ipv6 = tk.Frame(self.tabs)
+        self.ipv6.columnconfigure(0, weight=1)
+        self.ipv6.rowconfigure(0, weight=1)
+        self.ipv6.grid(sticky=tk.N + tk.S + tk.E + tk.W)
+        self.tabs.add(self.ipv6, text="IPv6 prefixes")
+
+        self.tree_scroll = tk.Scrollbar(self.ipv4)
         self.tree_scroll.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
         self.create_tree()
 
@@ -337,12 +354,15 @@ class NipapGui(tk.Frame):
     def create_tree(self):
         if self.tree:
             self.tree.destroy()
-        self.tree = ttk.Treeview(self.body, columns=('vlan', 'tags', 'descr', 'comment'),
+        self.tree = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'descr', 'comment'),
                                  yscrollcommand=self.tree_scroll.set, style='Nipap.Treeview')
         self.tree_scroll.config(command=self.tree.yview)
 
         self.tree.column('vlan', width=70, anchor='center', stretch=False)
         self.tree.heading('vlan', text='VLAN ID')
+
+        self.tree.column('util', width=70, anchor='center', stretch=False)
+        self.tree.heading('util', text='Used')
 
         self.tree.column('tags', anchor='center')
         self.tree.heading('tags', text='Tags')
@@ -354,7 +374,7 @@ class NipapGui(tk.Frame):
         self.tree.heading('comment', anchor='w', text='Comment')
 
         self.lock.acquire()
-        self.populate_tree(self.prefixes)
+        self.populate_tree(self.prefixes_v4)
         self.lock.release()
 
         # Colorize rows
@@ -371,7 +391,7 @@ class NipapGui(tk.Frame):
         self.tree.tag_configure('assignment_quarantine', image=self.icon_assignment_quarantine)
         self.tree.tag_configure('host_quarantine', image=self.icon_host_quarantine)
         # Selected
-        self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '9', 'bold'))
+        self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '8', 'bold'))
         self.tree.tag_configure('free', background='#eeffee', image=self.icon_free,
                                 font=('TkDefaultFont', '8', 'italic'))
 
@@ -396,7 +416,10 @@ class NipapGui(tk.Frame):
             return
 
         # Iterate trough prefixes from provided part of the tree
-        for p, pd in tree_part['children'].items():
+        # TODO: separate IPv4 and IPv6 trees
+        for p in sorted(tree_part['children'], key=lambda ip: ipaddress.ip_network(ip)):
+        # for p in tree_part['children']:
+            pd = tree_part['children'][p]
 
             if pd['prefix'] is None:
                 # Insert item into the tree
@@ -417,6 +440,7 @@ class NipapGui(tk.Frame):
             # Insert item into the tree
             self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
                 pd['prefix'].vlan or '',
+                "%2.1f%%" % (100 * pd['prefix'].used_addresses / pd['prefix'].total_addresses),
                 ', '.join(pd['prefix'].tags.keys()),
                 pd['prefix'].description or '',
                 pd['prefix'].comment or ''
@@ -540,12 +564,28 @@ class NipapGui(tk.Frame):
 
     def refresh(self, event=None):
         self.read_queue()
+        self.separate_ipv4_ipv6()
         self.create_tree()
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
             print("Prefix deleted")
             self.refresh()
+
+    def separate_ipv4_ipv6(self):
+        self.prefixes_v4 = {
+            'children': {}
+        }
+        self.prefixes_v6 = {
+            'children': {}
+        }
+        for prefix, data in self.prefixes['children'].items():
+            p = ipaddress.ip_network(prefix)
+            if isinstance(p, ipaddress.IPv4Network):
+                self.prefixes_v4['children'][prefix] = data
+            elif isinstance(p, ipaddress.IPv6Network):
+                self.prefixes_v6['children'][prefix] = data
+
 
 
 app = GuiThread()
