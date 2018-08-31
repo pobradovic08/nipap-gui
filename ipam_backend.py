@@ -188,7 +188,7 @@ class IpamBackend:
         cidr = -1
         next_ip = from_prefix.broadcast_address + 1
         if next_ip > to_prefix.network_address:
-            print("From higher than to.")
+            #print("From higher than to.")
             return []
         if next_ip == to_prefix.network_address:
             return missing_list
@@ -223,7 +223,7 @@ class IpamBackend:
         if start_ip == first_prefix.network_address:
             return None
 
-        if IpamBackend._is_subnet_of(first_prefix, supernet):
+        if IpamBackend.is_subnet_of(first_prefix, supernet):
             cidr = -1
             for cidr_candidate in range(32, 0, -1):
                 try:
@@ -253,7 +253,7 @@ class IpamBackend:
         if end_ip == last_prefix.broadcast_address:
             return None
 
-        if IpamBackend._is_subnet_of(last_prefix, supernet):
+        if IpamBackend.is_subnet_of(last_prefix, supernet):
             cidr = -1
             for cidr_candidate in range(32, 0, -1):
                 try:
@@ -284,7 +284,7 @@ class IpamBackend:
             return missing_list
 
         prefix_list = sorted(prefix_list, key=lambda prefix: ipaddress.ip_network(prefix))
-        print(prefix_list)
+        #print(prefix_list)
         gaps = IpamBackend.find_gaps_between_prefixes(prefix_list[0], prefix_list[1])
         if gaps:
             prefix_list.extend(gaps)
@@ -314,15 +314,3 @@ class IpamBackend:
         missing = IpamBackend.prefix_fill_between(prefix_list)
         prefix_list.extend(missing)
         return sorted(prefix_list, key=lambda prefix: ipaddress.ip_network(prefix))
-
-    @staticmethod
-    def _is_subnet_of(a, b):
-        try:
-            # Always false if one is v4 and the other is v6.
-            if a._version != b._version:
-                raise TypeError("%s and %s are not of the same version" % (a, b))
-            return (b.network_address <= a.network_address and
-                    b.broadcast_address >= a.broadcast_address)
-        except AttributeError:
-            raise TypeError("Unable to test subnet containment "
-                            "between %s and %s" % (a, b))

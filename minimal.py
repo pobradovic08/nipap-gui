@@ -251,6 +251,8 @@ class NipapGui(tk.Frame):
 
         self.icon_arrow = tk.PhotoImage(file=os.path.join(self.resources_path, 'arrow.gif'))
 
+        self.icon_free = tk.PhotoImage(file=os.path.join(self.resources_path, 'free.gif'))
+
     def create_layout(self):
         """
         Creates main layout window
@@ -374,6 +376,8 @@ class NipapGui(tk.Frame):
         self.tree.tag_configure('host_quarantine', image=self.icon_host_quarantine)
         # Selected
         self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '9', 'bold'))
+        self.tree.tag_configure('free', background='#eeffee', image=self.icon_free,
+                                font=('TkDefaultFont', '8', 'italic'))
 
         # Display tree
         self.tree.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
@@ -474,6 +478,9 @@ class NipapGui(tk.Frame):
             # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
             # Define menu items
+            if self.tree.tag_has('reservation', iid):
+                self.tree_menu.add_command(label="Show free prefixes", command=lambda: self.show_free(prefix))
+            self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Copy IP", command=lambda: self.copy_to_clipboard(prefix, 'ip'))
             self.tree_menu.add_command(label="Copy netmask", command=lambda: self.copy_to_clipboard(prefix, 'mask'))
             self.tree_menu.add_command(label="Copy CIDR", command=lambda: self.copy_to_clipboard(prefix, 'cidr'))
@@ -497,6 +504,40 @@ class NipapGui(tk.Frame):
                                        command=lambda: self.delete_prefix(iid))
             # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
+
+    def show_free(self, prefix):
+        p = self._find_prefix(prefix, self.prefixes)
+        if 'children' not in p or not p['children']:
+            return
+        supernet = p['prefix'].prefix
+        prefixes = list(p['children'].keys())
+        all_prefixes = IpamBackend.supernet_fill_gaps(supernet, prefixes)
+        for mp in all_prefixes:
+            if mp not in prefixes:
+                p['children'][mp] = {
+                    'parent': p['prefix'].prefix,
+                    'prefix': None,
+                    'children': {}
+                }
+        self.create_tree()
+        iid_children = self.tree.get_children([prefix])
+        if iid_children:
+            self.tree.see(iid_children[0])
+        self.tree.see(prefix)
+        self.tree.selection_set(prefix)
+
+    def _find_prefix(self, prefix, prefix_tree):
+        if 'children' in prefix_tree:
+            for child in prefix_tree['children']:
+                try:
+                    if not IpamBackend.is_subnet_of(ipaddress.ip_network(prefix), ipaddress.ip_network(child)):
+                        continue
+                except TypeError:
+                    continue
+                if prefix == child:
+                    return prefix_tree['children'][child]
+                else:
+                    return self._find_prefix(prefix, prefix_tree['children'][child])
 
     def copy_to_clipboard(self, prefix, what):
         """
