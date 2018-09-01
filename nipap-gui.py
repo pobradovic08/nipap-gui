@@ -7,7 +7,8 @@ import threading
 import queue
 import configparser
 
-from ipam_backend import IpamBackend
+from classess import IpamBackend
+from classess import IpamCommon
 
 
 class GuiThread:
@@ -544,7 +545,7 @@ class NipapGui(tk.Frame):
             return
         supernet = p['prefix'].prefix
         prefixes = list(p['children'].keys())
-        all_prefixes = IpamBackend.supernet_fill_gaps(supernet, prefixes)
+        all_prefixes = IpamCommon.supernet_fill_gaps(supernet, prefixes)
         for mp in all_prefixes:
             if mp not in prefixes:
                 p['children'][mp] = {
@@ -574,7 +575,7 @@ class NipapGui(tk.Frame):
         if 'children' in prefix_tree:
             for child in prefix_tree['children']:
                 try:
-                    if not IpamBackend.is_subnet_of(ipaddress.ip_network(prefix), ipaddress.ip_network(child)):
+                    if not IpamCommon.is_subnet_of(ipaddress.ip_network(prefix), ipaddress.ip_network(child)):
                         continue
                 except TypeError:
                     continue
