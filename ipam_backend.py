@@ -220,8 +220,14 @@ class IpamBackend:
         if next_ip == to_prefix.network_address:
             return missing_list
 
-        # TODO: If IPv6 start CIDR from 64
-        for cidr_candidate in range(32, 0, -1):
+        if isinstance(from_prefix, ipaddress.IPv4Network):
+            cidr_start = 32
+        elif isinstance(from_prefix, ipaddress.IPv6Network):
+            cidr_start = 64
+        else:
+            raise ValueError("Prefix not v4 nor v6")
+
+        for cidr_candidate in range(cidr_start, 0, -1):
             try:
                 prefix_candidate = ipaddress.ip_network("%s/%d" % (next_ip, cidr_candidate))
                 if to_prefix.overlaps(prefix_candidate):
@@ -253,8 +259,13 @@ class IpamBackend:
 
         if IpamBackend.is_subnet_of(first_prefix, supernet):
             cidr = -1
-            # TODO: If IPv6 start CIDR from 64
-            for cidr_candidate in range(32, 0, -1):
+            if isinstance(supernet, ipaddress.IPv4Network):
+                cidr_start = 32
+            elif isinstance(supernet, ipaddress.IPv6Network):
+                cidr_start = 64
+            else:
+                raise ValueError("Prefix not v4 nor v6")
+            for cidr_candidate in range(cidr_start, 0, -1):
                 try:
                     prefix_candidate = ipaddress.ip_network("%s/%d" % (start_ip, cidr_candidate))
                     if first_prefix.overlaps(prefix_candidate):
@@ -284,8 +295,14 @@ class IpamBackend:
 
         if IpamBackend.is_subnet_of(last_prefix, supernet):
             cidr = -1
-            #TODO: If IPv6 start CIDR from 64
-            for cidr_candidate in range(32, 0, -1):
+            if isinstance(supernet, ipaddress.IPv4Network):
+                cidr_start = 32
+            elif isinstance(supernet, ipaddress.IPv6Network):
+                cidr_start = 64
+            else:
+                raise ValueError("Prefix not v4 nor v6")
+
+            for cidr_candidate in range(cidr_start, 0, -1):
                 try:
                     prefix_candidate = ipaddress.ip_network("%s/%d" % (end_ip, cidr_candidate), strict=False)
                     if last_prefix.overlaps(prefix_candidate):
