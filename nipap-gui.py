@@ -20,7 +20,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-
 import tkinter as tk
 from tkinter import ttk
 import tkinter.messagebox as mbox
@@ -42,7 +41,7 @@ class GuiThread:
         app.mainloop()
 
 
-class NipapGui(tk.Frame):
+class NipapGui(ttk.Frame):
 
     def __init__(self, master=None):
 
@@ -64,11 +63,12 @@ class NipapGui(tk.Frame):
         config.read('config.ini')
         self.nipap_config = config['nipap']
 
-        tk.Frame.__init__(self, master, cursor='left_ptr', padx=10, pady=10)
+        ttk.Frame.__init__(self, master, cursor='left_ptr', padding=10)
         top = self.winfo_toplevel()
         top.rowconfigure(0, weight=1)
         top.columnconfigure(0, weight=1)
-        top.geometry('1024x768')
+        # top.geometry('1024x768')
+        # top.attributes('-fullscreen', True)
         top.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -115,13 +115,13 @@ class NipapGui(tk.Frame):
         self.ipam_search_thread.start()
 
     def display_loading(self):
-        self.loading = tk.Frame(self)
+        self.loading = ttk.Frame(self)
         self.loading.grid(row=0, column=0)
 
         self.loading_string.set("Connecting to %s ..." % self.nipap_config['host'])
-        self.loading_label = tk.Label(self.loading, textvariable=self.loading_string)
+        self.loading_label = ttk.Label(self.loading, textvariable=self.loading_string)
         self.loading_label.grid(row=0, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
-        self.pb = tk.ttk.Progressbar(self.loading, mode='indeterminate')
+        self.pb = ttk.Progressbar(self.loading, mode='indeterminate')
         self.pb.start()
         self.pb.grid(row=1, column=0, sticky=tk.N + tk.S + tk.E + tk.W)
 
@@ -138,7 +138,7 @@ class NipapGui(tk.Frame):
                     self.error['msg'] = msg['data']
                     self.error['callback'] = msg['callback']
                 self.lock.release()
-                #print(msg)
+                # print(msg)
             except queue.Empty:
                 pass
 
@@ -219,7 +219,7 @@ class NipapGui(tk.Frame):
             search_string = ' and '.join([search_string, filter_string])
         else:
             search_string = filter_string
-        #print(search_string)
+        # print(search_string)
         return search_string
 
     def handle_error(self, event):
@@ -296,56 +296,59 @@ class NipapGui(tk.Frame):
         """
 
         # Main header Frame
-        self.header = tk.Frame(self)
+        self.header = ttk.Frame(self)
         self.header.columnconfigure(1, weight=1)  # search bar
         self.header.grid(column=0, row=0, sticky=tk.E + tk.W)
 
         # Search Label and Entry field
-        self.search_label = tk.Label(self.header, text="Prefix search:")
+        self.search_label = ttk.Label(self.header, text="Prefix search:")
         self.search_label.grid(row=0, column=0, sticky=tk.E)
 
-        self.search = tk.Entry(self.header, textvariable=self.search_string, font=('TkDefaultFont', 9, 'bold'))
-        self.search.grid(row=0, column=1, columnspan=2, sticky=tk.E + tk.W)
+        self.search = ttk.Entry(self.header, textvariable=self.search_string)
+        self.search.grid(row=0, column=1, columnspan=2, sticky=tk.E + tk.W, padx=10, pady=5)
         self.search.bind('<Return>', self.run_search)
 
         # VRF OptionMenu selection
         self.lock.acquire()
+        print(self.vrf_list.keys())
         self.current_vrf.set(list(self.vrf_list.keys())[0])
-        self.om = tk.OptionMenu(self.header, self.current_vrf, *self.vrf_list, command=self.run_search)
+        self.om = ttk.OptionMenu(self.header, self.current_vrf, self.current_vrf.get(), *self.vrf_list,
+                                 command=self.run_search)
         self.lock.release()
-        self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
+        #self.om.config(indicatoron=0, compound='right', image=self.icon_arrow)
+        self.om.config(compound='right', image=self.icon_arrow)
         self.om.grid(row=0, column=3, sticky=tk.E + tk.W)
 
         # Vlan ID Label and Entry field
-        self.vlan_label = tk.Label(self.header, text="Vlan ID:")
+        self.vlan_label = ttk.Label(self.header, text="Vlan ID:")
         self.vlan_label.grid(row=1, column=0, sticky=tk.E)
 
-        self.vlan_entry = tk.Entry(self.header)
-        self.vlan_entry.grid(row=1, column=1, sticky=tk.W)
+        self.vlan_entry = ttk.Entry(self.header)
+        self.vlan_entry.grid(row=1, column=1, sticky=tk.W, padx=10, pady=5)
         self.vlan_entry.bind('<Return>', self.run_search)
 
         # Checkboxes for prefix statuses
-        self.checkboxes = tk.Frame(self.header)
+        self.checkboxes = ttk.Frame(self.header)
         self.checkboxes.grid(row=1, column=3)
-        self.chk_reserved = tk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved,
-                                           command=self.run_search)
+        self.chk_reserved = ttk.Checkbutton(self.checkboxes, text="Reserved", variable=self.filter_reserved,
+                                            command=self.run_search)
         self.chk_reserved.pack(side=tk.LEFT)
-        self.chk_assigned = tk.Checkbutton(self.checkboxes, text="Assigned", variable=self.filter_assigned,
-                                           command=self.run_search)
+        self.chk_assigned = ttk.Checkbutton(self.checkboxes, text="Assigned", variable=self.filter_assigned,
+                                            command=self.run_search)
         self.chk_assigned.pack(side=tk.LEFT)
-        self.chk_quarantine = tk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine,
-                                             command=self.run_search)
+        self.chk_quarantine = ttk.Checkbutton(self.checkboxes, text="Quarantine", variable=self.filter_quarantine,
+                                              command=self.run_search)
         self.chk_quarantine.pack(side=tk.LEFT)
 
     def create_body(self):
-        self.body = tk.Frame(self, padx=10, pady=10)
+        self.body = ttk.Frame(self, padding=10)
         self.body.grid(column=0, row=1, sticky=tk.N + tk.S + tk.E + tk.W)
         self.body.columnconfigure(0, weight=1)
         self.body.rowconfigure(0, weight=1)
         self.tabs = ttk.Notebook(self.body)
         self.tabs.grid(sticky=tk.N + tk.S + tk.E + tk.W)
 
-        self.ipv4 = tk.Frame(self.tabs)
+        self.ipv4 = ttk.Frame(self.tabs)
         self.ipv4.columnconfigure(0, weight=1)
         self.ipv4.rowconfigure(0, weight=1)
         self.ipv4.grid(sticky=tk.N + tk.S + tk.E + tk.W)
@@ -354,7 +357,7 @@ class NipapGui(tk.Frame):
         self.tree_scroll_v4 = tk.Scrollbar(self.ipv4)
         self.tree_scroll_v4.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
 
-        self.ipv6 = tk.Frame(self.tabs)
+        self.ipv6 = ttk.Frame(self.tabs)
         self.ipv6.columnconfigure(0, weight=1)
         self.ipv6.rowconfigure(0, weight=1)
         self.ipv6.grid(sticky=tk.N + tk.S + tk.E + tk.W)
@@ -367,17 +370,17 @@ class NipapGui(tk.Frame):
         self.create_tree_v6()
 
     def create_footer(self):
-        self.footer = tk.Frame(self)
+        self.footer = ttk.Frame(self)
         self.footer.grid(column=0, row=2, sticky=tk.E + tk.W)
         self.footer.columnconfigure(1, weight=1)
 
-        self.status_label = tk.Label(self.footer, textvariable=self.status)
+        self.status_label = ttk.Label(self.footer, textvariable=self.status)
         self.status_label.grid(row=0, column=0, sticky=tk.E + tk.S)
 
-        self.refresh_button = tk.Button(self.footer, text='Refresh', command=self.run_search)
+        self.refresh_button = ttk.Button(self.footer, text='Refresh', command=self.run_search)
         self.refresh_button.grid(row=0, column=1, sticky=tk.E)
 
-        self.quit_button = tk.Button(self.footer, text='Quit', command=self.quit)
+        self.quit_button = ttk.Button(self.footer, text='Quit', command=self.quit)
         self.quit_button.grid(row=0, column=2, sticky=tk.E)
 
     def create_tree_v4(self):
@@ -391,16 +394,16 @@ class NipapGui(tk.Frame):
         if version == 'v4':
             if self.tree_v4:
                 self.tree_v4.destroy()
-            self.tree_v4= ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
-                                       yscrollcommand=self.tree_scroll_v4.set, style='Nipap.Treeview')
+            self.tree_v4 = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
+                                        yscrollcommand=self.tree_scroll_v4.set, style='Nipap.Treeview')
             self.tree_scroll_v4.config(command=self.tree_v4.yview)
             treeview = self.tree_v4
             prefixes = self.prefixes_v4
         elif version == 'v6':
             if self.tree_v6:
                 self.tree_v6.destroy()
-            self.tree_v6= ttk.Treeview(self.ipv6, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
-                                       yscrollcommand=self.tree_scroll_v6.set, style='Nipap.Treeview')
+            self.tree_v6 = ttk.Treeview(self.ipv6, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
+                                        yscrollcommand=self.tree_scroll_v6.set, style='Nipap.Treeview')
             self.tree_scroll_v6.config(command=self.tree_v6.yview)
             treeview = self.tree_v6
             prefixes = self.prefixes_v6
@@ -445,7 +448,7 @@ class NipapGui(tk.Frame):
         # Selected
         treeview.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '8', 'bold'))
         treeview.tag_configure('free', background='#eeffee', image=self.icon_free,
-                                   font=('TkDefaultFont', '8', 'italic'))
+                               font=('TkDefaultFont', '8', 'italic'))
 
         # Display tree
         treeview.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
@@ -468,13 +471,13 @@ class NipapGui(tk.Frame):
         # Iterate trough prefixes from provided part of the tree
         # TODO: separate IPv4 and IPv6 trees
         for p in sorted(tree_part['children'], key=lambda ip: ipaddress.ip_network(ip)):
-        # for p in tree_part['children']:
+            # for p in tree_part['children']:
             pd = tree_part['children'][p]
 
             if pd['prefix'] is None:
                 # Insert item into the tree
                 treeview.insert(pd['parent'], 'end', iid=p, text=p,
-                                    values=('', '', 'Free', ''), tags=['free'])
+                                values=('', '', 'Free', ''), tags=['free'])
                 continue
 
             # Predefined prefix tags (prefix type from NIPAP)
@@ -513,7 +516,6 @@ class NipapGui(tk.Frame):
         :return:
         """
 
-
         if self.tabs.select() == str(self.ipv4):
             print("IPv4")
             treeview = self.tree_v4
@@ -522,7 +524,6 @@ class NipapGui(tk.Frame):
             treeview = self.tree_v6
         else:
             return
-
 
         # Get iid for row under mouse pointer
         iid = treeview.identify_row(event.y)
@@ -657,7 +658,6 @@ class NipapGui(tk.Frame):
                 self.prefixes_v4['children'][prefix] = data
             elif isinstance(p, ipaddress.IPv6Network):
                 self.prefixes_v6['children'][prefix] = data
-
 
 
 app = GuiThread()
