@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk
-import re
 import tkinter.messagebox as mbox
 import ipaddress
 import os
@@ -33,7 +32,8 @@ class NipapGui(tk.Frame):
         self.vrf_list = {}
 
         self.ipam_search_thread = None
-        self.tree = None
+        self.tree_v4 = None
+        self.tree_v6 = None
         self.error = {}
 
         config = configparser.ConfigParser()
@@ -327,15 +327,20 @@ class NipapGui(tk.Frame):
         self.ipv4.grid(sticky=tk.N + tk.S + tk.E + tk.W)
         self.tabs.add(self.ipv4, text="IPv4 prefixes")
 
+        self.tree_scroll_v4 = tk.Scrollbar(self.ipv4)
+        self.tree_scroll_v4.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
+
         self.ipv6 = tk.Frame(self.tabs)
         self.ipv6.columnconfigure(0, weight=1)
         self.ipv6.rowconfigure(0, weight=1)
         self.ipv6.grid(sticky=tk.N + tk.S + tk.E + tk.W)
         self.tabs.add(self.ipv6, text="IPv6 prefixes")
 
-        self.tree_scroll = tk.Scrollbar(self.ipv4)
-        self.tree_scroll.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
-        self.create_tree()
+        self.tree_scroll_v6 = tk.Scrollbar(self.ipv6)
+        self.tree_scroll_v6.grid(column=1, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
+
+        self.create_tree_v4()
+        self.create_tree_v6()
 
     def create_footer(self):
         self.footer = tk.Frame(self)
@@ -351,60 +356,80 @@ class NipapGui(tk.Frame):
         self.quit_button = tk.Button(self.footer, text='Quit', command=self.quit)
         self.quit_button.grid(row=0, column=2, sticky=tk.E)
 
-    def create_tree(self):
-        if self.tree:
-            self.tree.destroy()
-        self.tree = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
-                                 yscrollcommand=self.tree_scroll.set, style='Nipap.Treeview')
-        self.tree_scroll.config(command=self.tree.yview)
+    def create_tree_v4(self):
+        self.create_tree('v4')
 
-        self.tree.column('vlan', width=70, anchor='center', stretch=False)
-        self.tree.heading('vlan', text='VLAN ID')
+    def create_tree_v6(self):
+        self.create_tree('v6')
 
-        self.tree.column('util', width=70, anchor='center', stretch=False)
-        self.tree.heading('util', text='Used')
+    def create_tree(self, version):
 
-        self.tree.column('tags', anchor='center')
-        self.tree.heading('tags', text='Tags')
+        if version == 'v4':
+            if self.tree_v4:
+                self.tree_v4.destroy()
+            self.tree_v4= ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
+                                       yscrollcommand=self.tree_scroll_v4.set, style='Nipap.Treeview')
+            self.tree_scroll_v4.config(command=self.tree_v4.yview)
+            treeview = self.tree_v4
+            prefixes = self.prefixes_v4
+        elif version == 'v6':
+            if self.tree_v6:
+                self.tree_v6.destroy()
+            self.tree_v6= ttk.Treeview(self.ipv6, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
+                                       yscrollcommand=self.tree_scroll_v6.set, style='Nipap.Treeview')
+            self.tree_scroll_v6.config(command=self.tree_v6.yview)
+            treeview = self.tree_v6
+            prefixes = self.prefixes_v6
+        else:
+            raise ValueError("Version must be v4 or v6")
 
-        self.tree.column('node', anchor='center')
-        self.tree.heading('node', text='Node')
+        treeview.column('vlan', width=70, anchor='center', stretch=False)
+        treeview.heading('vlan', text='VLAN ID')
 
-        self.tree.column('descr', anchor='w')
-        self.tree.heading('descr', anchor='w', text='Descriptuon')
+        treeview.column('util', width=70, anchor='center', stretch=False)
+        treeview.heading('util', text='Used')
 
-        self.tree.column('comment', anchor='w')
-        self.tree.heading('comment', anchor='w', text='Comment')
+        treeview.column('tags', anchor='center')
+        treeview.heading('tags', text='Tags')
+
+        treeview.column('node', anchor='center')
+        treeview.heading('node', text='Node')
+
+        treeview.column('descr', anchor='w')
+        treeview.heading('descr', anchor='w', text='Descriptuon')
+
+        treeview.column('comment', anchor='w')
+        treeview.heading('comment', anchor='w', text='Comment')
 
         self.lock.acquire()
-        self.populate_tree(self.prefixes_v4)
+        self.populate_tree(treeview, prefixes)
         self.lock.release()
 
         # Colorize rows
         # Assigned
-        self.tree.tag_configure('reservation_assigned', image=self.icon_reservation)
-        self.tree.tag_configure('assignment_assigned', image=self.icon_assignment)
-        self.tree.tag_configure('host_assigned', image=self.icon_host)
+        treeview.tag_configure('reservation_assigned', image=self.icon_reservation)
+        treeview.tag_configure('assignment_assigned', image=self.icon_assignment)
+        treeview.tag_configure('host_assigned', image=self.icon_host)
         # Reserved
-        self.tree.tag_configure('reservation_reserved', image=self.icon_reservation_reserved)
-        self.tree.tag_configure('assignment_reserved', image=self.icon_assignment_reserved)
-        self.tree.tag_configure('host_reserved', image=self.icon_host_reserved)
+        treeview.tag_configure('reservation_reserved', image=self.icon_reservation_reserved)
+        treeview.tag_configure('assignment_reserved', image=self.icon_assignment_reserved)
+        treeview.tag_configure('host_reserved', image=self.icon_host_reserved)
         # Quarantine
-        self.tree.tag_configure('reservation_quarantine', image=self.icon_reservation_quarantine)
-        self.tree.tag_configure('assignment_quarantine', image=self.icon_assignment_quarantine)
-        self.tree.tag_configure('host_quarantine', image=self.icon_host_quarantine)
+        treeview.tag_configure('reservation_quarantine', image=self.icon_reservation_quarantine)
+        treeview.tag_configure('assignment_quarantine', image=self.icon_assignment_quarantine)
+        treeview.tag_configure('host_quarantine', image=self.icon_host_quarantine)
         # Selected
-        self.tree.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '8', 'bold'))
-        self.tree.tag_configure('free', background='#eeffee', image=self.icon_free,
-                                font=('TkDefaultFont', '8', 'italic'))
+        treeview.tag_configure('selected', background='#ddeeff', font=('TkDefaultFont', '8', 'bold'))
+        treeview.tag_configure('free', background='#eeffee', image=self.icon_free,
+                                   font=('TkDefaultFont', '8', 'italic'))
 
         # Display tree
-        self.tree.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
+        treeview.grid(column=0, row=0, sticky=tk.E + tk.W + tk.N + tk.S)
 
         # Bind RMB to show context menu
-        self.tree.bind("<Button-3>", self.popup)
+        treeview.bind("<Button-3>", self.popup)
 
-    def populate_tree(self, tree_part):
+    def populate_tree(self, treeview, tree_part):
         """
         Recursively ill `self.tree` TreeView object with prefixes from `tree_part`.
         Marks prefixes (tags them) that match search criteria so they can be displayed differently in tree
@@ -412,8 +437,6 @@ class NipapGui(tk.Frame):
         :return:
         """
         # TODO: remember first selected item and position scrollbar position on it
-        # Compile pattern from search string
-        pattern = re.compile(self.search_string.get(), re.IGNORECASE)
 
         if not tree_part or 'children' not in tree_part:
             return
@@ -426,8 +449,8 @@ class NipapGui(tk.Frame):
 
             if pd['prefix'] is None:
                 # Insert item into the tree
-                self.tree.insert(pd['parent'], 'end', iid=p, text=p,
-                                 values=('', '', 'Free', ''), tags=['free'])
+                treeview.insert(pd['parent'], 'end', iid=p, text=p,
+                                    values=('', '', 'Free', ''), tags=['free'])
                 continue
 
             # Predefined prefix tags (prefix type from NIPAP)
@@ -441,7 +464,7 @@ class NipapGui(tk.Frame):
                 prefix_tags.append('selected')
 
             # Insert item into the tree
-            self.tree.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
+            treeview.insert(pd['parent'], 'end', iid=pd['prefix'].prefix, text=pd['prefix'].display_prefix, values=(
                 pd['prefix'].vlan or '',
                 "%2.1f%%" % (100 * pd['prefix'].used_addresses / pd['prefix'].total_addresses),
                 ', '.join(pd['prefix'].tags.keys()),
@@ -452,11 +475,11 @@ class NipapGui(tk.Frame):
 
             # If prefix matches search criteria expand tree so prefix is visible
             if pd['selected']:
-                self.tree.see(pd['prefix'].prefix)
+                treeview.see(pd['prefix'].prefix)
 
             # Call itself with prefix children
             if pd['children']:
-                self.populate_tree(pd)
+                self.populate_tree(treeview, pd)
 
     def popup(self, event):
         """
@@ -465,21 +488,33 @@ class NipapGui(tk.Frame):
         :param event:
         :return:
         """
+
+
+        if self.tabs.select() == str(self.ipv4):
+            print("IPv4")
+            treeview = self.tree_v4
+        elif self.tabs.select() == str(self.ipv6):
+            print("IPv6")
+            treeview = self.tree_v6
+        else:
+            return
+
+
         # Get iid for row under mouse pointer
-        iid = self.tree.identify_row(event.y)
+        iid = treeview.identify_row(event.y)
         if iid:
             # Select row
-            self.tree.selection_set(iid)
-            prefix = self.tree.item(iid)['text']
+            treeview.selection_set(iid)
+            prefix = treeview.item(iid)['text']
 
             # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
             # Define menu items
-            if self.tree.tag_has('reservation', iid):
+            if treeview.tag_has('reservation', iid):
                 self.tree_menu.add_command(label="Show free prefixes", command=lambda: self.show_free(prefix))
-            if self.tree.tag_has('reservation', iid):
+            if treeview.tag_has('reservation', iid):
                 self.tree_menu.add_command(label="Add prefix")
-            if self.tree.tag_has('assignment', iid):
+            if treeview.tag_has('assignment', iid):
                 self.tree_menu.add_command(label="Add host")
             # Change prefix status
             self.tree_status_menu = tk.Menu(tearoff=0)
@@ -494,7 +529,7 @@ class NipapGui(tk.Frame):
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Edit")
             self.tree_menu.add_separator()
-            if self.tree.tag_has('host', iid):
+            if treeview.tag_has('host', iid):
                 self.tree_menu.add_command(label="SSH", image=self.icon_host, compound=tk.LEFT)
                 self.tree_menu.add_command(label="Telnet")
                 self.tree_menu.add_separator()
@@ -520,12 +555,20 @@ class NipapGui(tk.Frame):
 
         p['selected'] = True
 
-        self.create_tree()
-        iid_children = self.tree.get_children([prefix])
+        if p['prefix'].family == 4:
+            self.create_tree_v4()
+            treeview = self.tree_v4
+        elif p['prefix'].family == 6:
+            self.create_tree_v6()
+            treeview = self.tree_v6
+        else:
+            return
+
+        iid_children = treeview.get_children([prefix])
         if iid_children:
-            self.tree.see(iid_children[0])
-        self.tree.see(prefix)
-        self.tree.selection_set(prefix)
+            treeview.see(iid_children[0])
+        treeview.see(prefix)
+        treeview.selection_set(prefix)
 
     def _find_prefix(self, prefix, prefix_tree):
         if 'children' in prefix_tree:
@@ -569,7 +612,8 @@ class NipapGui(tk.Frame):
     def refresh(self, event=None):
         self.read_queue()
         self.separate_ipv4_ipv6()
-        self.create_tree()
+        self.create_tree_v4()
+        self.create_tree_v6()
 
     def delete_prefix(self, event=None):
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
