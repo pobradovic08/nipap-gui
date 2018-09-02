@@ -45,8 +45,6 @@ class IpamBackend:
 
         self._init_db()
         self.load_config(cfg)
-        # TODO: Maybe move this to separate method
-        self.get_vrfs()
 
     def load_config(self, nipap_config):
         """
@@ -113,6 +111,7 @@ class IpamBackend:
             label = "VRF %s [%s]" % (vrf.name, vrf.rt) if vrf.rt else "VRF %s" % vrf.name
             self.vrf_labels[label] = str(vrf.id)
         self.lock.release()
+        return True if self.vrfs else False
 
     def search(self, search_string='', vrf_id=None, filters = None):
         """

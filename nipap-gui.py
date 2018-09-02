@@ -31,6 +31,7 @@ import configparser
 
 from classess import IpamBackend
 from classess import IpamCommon
+from classess import IpamAddPrefix
 
 
 class GuiThread:
@@ -62,12 +63,13 @@ class NipapGui(ttk.Frame):
         config = configparser.ConfigParser()
         config.read('config.ini')
         self.nipap_config = config['nipap']
+        self.ipam = IpamBackend(self.queue, self.nipap_config)
 
         ttk.Frame.__init__(self, master, cursor='left_ptr', padding=10)
         top = self.winfo_toplevel()
         top.rowconfigure(0, weight=1)
         top.columnconfigure(0, weight=1)
-        # top.geometry('1024x768')
+        top.geometry('1280x768')
         # top.attributes('-fullscreen', True)
         top.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
         self.rowconfigure(0, weight=1)
@@ -77,6 +79,9 @@ class NipapGui(ttk.Frame):
         self.define_icons()
         style = ttk.Style()
         style.configure('Nipap.Treeview', font=('TkDefaultFont', 8, 'normal'))
+
+        label_style = ttk.Style()
+        label_style.configure('Nipap.Label', font=('TkDefaultFont', 8, 'bold'))
 
         # Can't call before creating root window
         self.status = tk.StringVar()
@@ -96,6 +101,7 @@ class NipapGui(ttk.Frame):
 
     def connect_to_server(self):
         # Spawn a thread for nipap initial connect
+        print("Connecting...")
         self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
         self.ipam_connect_thread.start()
 
@@ -137,31 +143,40 @@ class NipapGui(ttk.Frame):
                 elif msg['type'] == 'error':
                     self.error['msg'] = msg['data']
                     self.error['callback'] = msg['callback']
+                else:
+                    print(msg)
                 self.lock.release()
-                # print(msg)
+                print(msg)
             except queue.Empty:
                 pass
 
     def thread_ipam_connect(self):
         try:
             try:
-                self.ipam = IpamBackend(self.queue, self.nipap_config)
+                print("[in thread] Getting VRFs")
+                if not self.ipam.get_vrfs():
+                    raise Exception("Couldn't fetch VRF list.")
+                else:
+                    print("[in thread] VRFs ok")
+                    print("[in thread] %s" % self.ipam.vrf_labels)
+                    self.queue.put({
+                        'type': 'vrfs',
+                        'data': self.ipam.vrf_labels,
+                        'status': 'ok'
+                    })
+                    self.event_generate('<<nipap_connected>>', when='tail')
             except Exception as e:
-                self.event_generate('<<nipap_error>>', when='tail')
+                print(e)
                 self.queue.put({
                     'type': 'error',
                     'data': e,
                     'callback': self.connect_to_server,
                     'status': 'error'
                 })
+                self.event_generate('<<nipap_error>>', when='tail')
                 return
-            self.event_generate('<<nipap_connected>>', when='tail')
-            self.queue.put({
-                'type': 'vrfs',
-                'data': self.ipam.vrf_labels,
-                'status': 'ok'
-            })
-        except tk.TclError:
+        except tk.TclError as e:
+            print(e)
             return
 
     def thread_ipam_search(self):
@@ -181,22 +196,22 @@ class NipapGui(ttk.Frame):
         try:
             self.ipam.search(self.search_string.get(), vrf_id, filters)
         except Exception as e:
-            self.event_generate('<<nipap_error>>', when='tail')
             self.queue.put({
                 'type': 'error',
                 'data': e,
                 'callback': self.run_search,
                 'status': 'error'
             })
+            self.event_generate('<<nipap_error>>', when='tail')
             return
         try:
             self.status.set("Done.")
-            self.event_generate('<<nipap_refresh>>', when='tail')
             self.queue.put({
                 'type': 'prefixes',
                 'data': self.ipam.db,
                 'status': 'ok'
             })
+            self.event_generate('<<nipap_refresh>>', when='tail')
         except tk.TclError as e:
             print(e)
             return
@@ -301,7 +316,7 @@ class NipapGui(ttk.Frame):
         self.header.grid(column=0, row=0, sticky=tk.E + tk.W)
 
         # Search Label and Entry field
-        self.search_label = ttk.Label(self.header, text="Prefix search:")
+        self.search_label = ttk.Label(self.header, text="Prefix search:", style="Nipap.Label")
         self.search_label.grid(row=0, column=0, sticky=tk.E)
 
         self.search = ttk.Entry(self.header, textvariable=self.search_string)
@@ -380,8 +395,26 @@ class NipapGui(ttk.Frame):
         self.refresh_button = ttk.Button(self.footer, text='Refresh', command=self.run_search)
         self.refresh_button.grid(row=0, column=1, sticky=tk.E)
 
+        self.expand_button = ttk.Button(self.footer, text='Expand All', command=self.expand_tree)
+        self.expand_button.grid(row=0, column=2, sticky=tk.E)
+
+        self.free_button = ttk.Button(self.footer, text='Show free', command=self.calculate_free)
+        self.free_button.grid(row=0, column=3, sticky=tk.E)
+
         self.quit_button = ttk.Button(self.footer, text='Quit', command=self.quit)
-        self.quit_button.grid(row=0, column=2, sticky=tk.E)
+        self.quit_button.grid(row=0, column=4, sticky=tk.E, padx=15)
+
+    def expand_tree(self):
+        #TODO: Expand all items in tree
+        pass
+
+    def calculate_free(self):
+        #TODO: Calculate free prefixes for all public IPs
+        pass
+
+    def add_prefix_dialog(self):
+        dialog = IpamAddPrefix()
+        dialog.grab_set()
 
     def create_tree_v4(self):
         self.create_tree('v4')
@@ -394,16 +427,18 @@ class NipapGui(ttk.Frame):
         if version == 'v4':
             if self.tree_v4:
                 self.tree_v4.destroy()
-            self.tree_v4 = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
-                                        yscrollcommand=self.tree_scroll_v4.set, style='Nipap.Treeview')
+            self.tree_v4 = ttk.Treeview(self.ipv4, columns=('vlan', 'util', 'tags', 'descr', 'comment'),
+                                        yscrollcommand=self.tree_scroll_v4.set, style='Nipap.Treeview',
+                                        selectmode='browse' )
             self.tree_scroll_v4.config(command=self.tree_v4.yview)
             treeview = self.tree_v4
             prefixes = self.prefixes_v4
         elif version == 'v6':
             if self.tree_v6:
                 self.tree_v6.destroy()
-            self.tree_v6 = ttk.Treeview(self.ipv6, columns=('vlan', 'util', 'tags', 'node', 'descr', 'comment'),
-                                        yscrollcommand=self.tree_scroll_v6.set, style='Nipap.Treeview')
+            self.tree_v6 = ttk.Treeview(self.ipv6, columns=('vlan', 'util', 'tags', 'descr', 'comment'),
+                                        yscrollcommand=self.tree_scroll_v6.set, style='Nipap.Treeview',
+                                        selectmode='browse' )
             self.tree_scroll_v6.config(command=self.tree_v6.yview)
             treeview = self.tree_v6
             prefixes = self.prefixes_v6
@@ -419,8 +454,8 @@ class NipapGui(ttk.Frame):
         treeview.column('tags', anchor='center')
         treeview.heading('tags', text='Tags')
 
-        treeview.column('node', anchor='center')
-        treeview.heading('node', text='Node')
+        #treeview.column('node', anchor='center')
+        #treeview.heading('node', text='Node')
 
         treeview.column('descr', anchor='w')
         treeview.heading('descr', anchor='w', text='Descriptuon')
@@ -469,7 +504,6 @@ class NipapGui(ttk.Frame):
             return
 
         # Iterate trough prefixes from provided part of the tree
-        # TODO: separate IPv4 and IPv6 trees
         for p in sorted(tree_part['children'], key=lambda ip: ipaddress.ip_network(ip)):
             # for p in tree_part['children']:
             pd = tree_part['children'][p]
@@ -477,7 +511,7 @@ class NipapGui(ttk.Frame):
             if pd['prefix'] is None:
                 # Insert item into the tree
                 treeview.insert(pd['parent'], 'end', iid=p, text=p,
-                                values=('', '', 'Free', ''), tags=['free'])
+                                values=('', '', '', 'Free', ''), tags=['free'])
                 continue
 
             # Predefined prefix tags (prefix type from NIPAP)
@@ -495,7 +529,7 @@ class NipapGui(ttk.Frame):
                 pd['prefix'].vlan or '',
                 "%2.1f%%" % (100 * pd['prefix'].used_addresses / pd['prefix'].total_addresses),
                 ', '.join(pd['prefix'].tags.keys()),
-                pd['prefix'].node or '',
+            #    pd['prefix'].node or '',
                 pd['prefix'].description or '',
                 pd['prefix'].comment or ''
             ), tags=prefix_tags)
@@ -537,28 +571,32 @@ class NipapGui(ttk.Frame):
             # Define menu items
             if treeview.tag_has('reservation', iid):
                 self.tree_menu.add_command(label="Show free prefixes", command=lambda: self.show_free(prefix))
-            if treeview.tag_has('reservation', iid):
-                self.tree_menu.add_command(label="Add prefix")
+            if treeview.tag_has('reservation', iid) or treeview.tag_has('free', iid):
+                self.tree_menu.add_command(label="Add prefix", command=lambda: self.add_prefix_dialog())
             if treeview.tag_has('assignment', iid):
-                self.tree_menu.add_command(label="Add host")
-            # Change prefix status
-            self.tree_status_menu = tk.Menu(tearoff=0)
-            self.tree_status_menu.add_command(label="Assigned")
-            self.tree_status_menu.add_command(label="Reserved")
-            self.tree_status_menu.add_command(label="Quarantine")
-            self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
+                self.tree_menu.add_command(label="Add host", command=lambda: self.add_prefix_dialog())
+
+            if not treeview.tag_has('free', iid):
+                # Change prefix status
+                self.tree_status_menu = tk.Menu(tearoff=0)
+                self.tree_status_menu.add_command(label="Assigned")
+                self.tree_status_menu.add_command(label="Reserved")
+                self.tree_status_menu.add_command(label="Quarantine")
+                self.tree_menu.add_cascade(label="Change status", menu=self.tree_status_menu)
             self.tree_menu.add_separator()
             self.tree_menu.add_command(label="Copy IP", command=lambda: self.copy_to_clipboard(prefix, 'ip'))
             self.tree_menu.add_command(label="Copy netmask", command=lambda: self.copy_to_clipboard(prefix, 'mask'))
             self.tree_menu.add_command(label="Copy CIDR", command=lambda: self.copy_to_clipboard(prefix, 'cidr'))
-            self.tree_menu.add_separator()
-            self.tree_menu.add_command(label="Edit")
-            self.tree_menu.add_separator()
+            if not treeview.tag_has('free', iid):
+                self.tree_menu.add_separator()
+                self.tree_menu.add_command(label="Edit")
+                self.tree_menu.add_separator()
             if treeview.tag_has('host', iid):
                 self.tree_menu.add_command(label="SSH", image=self.icon_host, compound=tk.LEFT)
                 self.tree_menu.add_command(label="Telnet")
                 self.tree_menu.add_separator()
-            self.tree_menu.add_command(label="Delete", activebackground='#770000',
+            if not treeview.tag_has('free', iid):
+                self.tree_menu.add_command(label="Delete", activebackground='#770000',
                                        command=lambda: self.delete_prefix(iid))
             # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
