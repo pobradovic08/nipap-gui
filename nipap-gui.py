@@ -56,14 +56,22 @@ class NipapGui(ttk.Frame):
         self.vrf_list = {}
 
         self.ipam_search_thread = None
+        self.tree_menu = None
         self.tree_v4 = None
         self.tree_v6 = None
         self.error = {}
 
         config = configparser.ConfigParser()
-        config.read('config.ini')
-        self.nipap_config = config['nipap']
-        self.ipam = IpamBackend(self.queue, self.nipap_config)
+        if config.read('config.ini'):
+            try:
+                self.nipap_config = config['nipap']
+                self.ipam = IpamBackend(self.queue, self.nipap_config)
+            except KeyError as e:
+                print(e)
+                exit(1)
+        else:
+            tk.messagebox.showerror(None, message="Configuration file missing")
+            exit(1)
 
         ttk.Frame.__init__(self, master, cursor='left_ptr', padding=10)
         top = self.winfo_toplevel()
@@ -71,7 +79,9 @@ class NipapGui(ttk.Frame):
         top.columnconfigure(0, weight=1)
         top.geometry('1280x768')
         # top.attributes('-fullscreen', True)
-        top.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
+        # Not working on GNU/Linux
+        #icon_path = "@" + os.path.join(self.resources_path, 'nipap-gui.ico')
+        #top.iconbitmap(icon_path)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.grid(sticky=tk.N + tk.S + tk.E + tk.W)
@@ -565,7 +575,9 @@ class NipapGui(ttk.Frame):
             # Select row
             treeview.selection_set(iid)
             prefix = treeview.item(iid)['text']
-
+            # Close popup if already exists
+            if self.tree_menu and self.tree_menu.winfo_exists():
+                self.tree_menu.destroy()
             # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
             # Define menu items

@@ -10,6 +10,7 @@ import queue
 from classess import IpamBackend
 from classess import IpamCommon
 
+
 class NipapTypeFrame(ttk.Frame):
 
     def __init__(self, master, variable):
@@ -21,6 +22,7 @@ class NipapTypeFrame(ttk.Frame):
         }
         for text, val in self.prefix_types.items():
             ttk.Radiobutton(self, variable=variable,text=text, value=val).pack(anchor=tk.W)
+
 
 class NipapStatusFrame(ttk.Frame):
 
@@ -45,7 +47,8 @@ class IpamAddPrefix(tk.Toplevel):
         self.columnconfigure(0, weight=1)
         # top.attributes('-fullscreen', True)
         self.resizable(False, False)
-        self.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
+        # Not working on GNU/Linux
+        #self.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
         self.title('NIPAP - Add Prefix')
 
         self.body = ttk.Frame(self, padding=10)
