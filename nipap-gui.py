@@ -484,8 +484,14 @@ class NipapGui(ttk.Frame):
         # TODO: Calculate free prefixes for all public IPs
         pass
 
-    def add_prefix_dialog(self):
-        dialog = IpamAddPrefix(self)
+    def add_prefix_dialog(self, parent=None):
+        prefix = parent
+        if parent:
+            res = self._find_prefix(parent, self.prefixes)
+            if res:
+                prefix = res['prefix']
+        # Pass pynipap.Prefix to IpamAddPrefix
+        dialog = IpamAddPrefix(self, parent=prefix)
         dialog.grab_set()
 
     def create_tree_v4(self):
@@ -649,10 +655,10 @@ class NipapGui(ttk.Frame):
                                            command=lambda: self.prefix_show_free(prefix))
             if treeview.tag_has('reservation', iid) or treeview.tag_has('free', iid):
                 self.tree_menu.add_command(label="Add prefix",
-                                           command=lambda: self.add_prefix_dialog())
+                                           command=lambda: self.add_prefix_dialog(iid))
             if treeview.tag_has('assignment', iid):
                 self.tree_menu.add_command(label="Add host",
-                                           command=lambda: self.add_prefix_dialog())
+                                           command=lambda: self.add_prefix_dialog(iid))
 
             if not treeview.tag_has('free', iid):
                 # Change prefix status

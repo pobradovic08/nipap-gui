@@ -7,6 +7,7 @@ import os
 import threading
 import queue
 
+from classess import IpamCommon
 from classess.queue_message import QueueMessage as QueMsg
 
 from pynipap import Prefix, NipapError
@@ -14,20 +15,41 @@ from pynipap import Prefix, NipapError
 
 class NipapTypeFrame(ttk.Frame):
 
-    def __init__(self, master, variable):
+    def __init__(self, master, variable, parent=None):
         ttk.Frame.__init__(self, master, padding=4)
+
+        s = ttk.Style()
+        s.configure('Disabled.TRadiobutton', foreground='red', state='disabled')
+
         self.prefix_types = {
             'Reservation': 'reservation',
             'Assignment': 'assignment',
             'Host': 'host'
         }
+
+        if parent:
+            if parent.type == 'assignment':
+                default = 'host'
+            else:
+                default = 'assignment'
+        else:
+            default = None
+
         for text, val in self.prefix_types.items():
-            ttk.Radiobutton(self, variable=variable, text=text, value=val).pack(anchor=tk.W)
+            tmp = ttk.Radiobutton(self, variable=variable, text=text, value=val)
+            tmp.pack(anchor=tk.W)
+            # Select default value
+            if default == val:
+                tmp.invoke()
+            # If prefix is host, disable everything, if it's assignment disable just host
+            if default == 'host' or (default == 'assignment' and val == 'host'):
+                tmp.state(('disabled',))
+
 
 
 class NipapStatusFrame(ttk.Frame):
 
-    def __init__(self, master, variable):
+    def __init__(self, master, variable, default='assigned'):
         ttk.Frame.__init__(self, master, padding=4)
         self.prefix_statuses = {
             'Reserved': 'reserved',
@@ -35,7 +57,10 @@ class NipapStatusFrame(ttk.Frame):
             'Quarantine': 'quarantine'
         }
         for text, val in self.prefix_statuses.items():
-            ttk.Radiobutton(self, variable=variable, text=text, value=val).pack(anchor=tk.W)
+            tmp = ttk.Radiobutton(self, variable=variable, text=text, value=val)
+            tmp.pack(anchor=tk.W)
+            if default == val:
+                tmp.invoke()
 
 
 class NonEmptyEntry(ttk.Entry):
@@ -61,36 +86,43 @@ class NonEmptyEntry(ttk.Entry):
 
 class PrefixEntry(ttk.Entry):
 
-    def __init__(self, master, textvariable, label=None, **kwargs):
+    def __init__(self, master, textvariable, label=None, parent=None, **kwargs):
         self.textvariable = textvariable
         ttk.Entry.__init__(
             self, master,
             textvariable=self.textvariable,
             **kwargs
         )
+        self.parent = parent
         self.label = label
         self.textvariable.trace('w', self.validate_not_empty)
         self.textvariable.set("")
 
     def validate_not_empty(self, *args):
         try:
-            ipaddress.ip_network(self.textvariable.get(), strict=False)
+            net = ipaddress.ip_network(self.textvariable.get(), strict=False)
+            parent = ipaddress.ip_network(self.parent.prefix)
+            if self.parent and not IpamCommon.is_subnet_of(net, parent):
+                raise Exception("Not the same subnet")
             if self.label:
                 self.label.config(foreground='black')
-        except Exception:
+        except Exception as e:
             if self.label:
                self.label.config(foreground = 'red')
 
 
 class IpamAddPrefix(tk.Toplevel):
 
-    def __init__(self, master=None):
+    def __init__(self, master=None, parent=None, prefix_type=None):
 
         self.queue = queue.Queue()
         self.lock = threading.Lock()
         self.ipam_add_prefix_thread = None
 
         self.resources_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../resources'))
+
+        self.parent = parent
+        self.prefix_type = prefix_type
 
         tk.Toplevel.__init__(self, master, cursor='left_ptr')
         self.rowconfigure(0, weight=1)
@@ -100,7 +132,11 @@ class IpamAddPrefix(tk.Toplevel):
         self.resizable(False, False)
         # Not working on GNU/Linux
         # self.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
-        self.title('NIPAP - Add Prefix')
+        if parent:
+            title = "NIPAP - Add Prefix in %s" % parent.prefix
+        else:
+            title = "NIPAP - Add Prefix"
+        self.title(title)
 
         self.body = ttk.Frame(self, padding=10)
         self.body.rowconfigure(0, weight=1)
@@ -169,26 +205,33 @@ class IpamAddPrefix(tk.Toplevel):
         # Labels left pane
         self.label_prefix = ttk.Label(self.form_left, text='Prefix:', style='Nipap.Label')
         self.label_prefix.grid(row=0, sticky=tk.E + tk.N, padx=10, pady=5)
-        ttk.Label(self.form_left, text='Type:', style='Nipap.Label').grid(row=1, sticky=tk.E + tk.N, padx=10, pady=5)
-        ttk.Label(self.form_left, text='Status:', style='Nipap.Label').grid(row=2, sticky=tk.E + tk.N, padx=10, pady=5)
-        ttk.Label(self.form_left, text='VLAN ID:', style='Nipap.Label').grid(row=3, sticky=tk.E + tk.N, padx=10, pady=5)
         self.label_description = ttk.Label(self.form_left, text='Description:', style='Nipap.Label')
-        self.label_description.grid(row=4, sticky=tk.E + tk.N, padx=10, pady=5)
+        self.label_description.grid(row=1, sticky=tk.E + tk.N, padx=10, pady=5)
+        ttk.Label(self.form_left, text='Type:', style='Nipap.Label').grid(row=2, sticky=tk.E + tk.N, padx=10, pady=5)
+        ttk.Label(self.form_left, text='Status:', style='Nipap.Label').grid(row=3, sticky=tk.E + tk.N, padx=10, pady=5)
+        ttk.Label(self.form_left, text='VLAN ID:', style='Nipap.Label').grid(row=4, sticky=tk.E + tk.N, padx=10, pady=5)
+
 
         # Fields left pane
-        self.form_prefix = PrefixEntry(self.form_left, textvariable=self.val_prefix, label=self.label_prefix, width=40)
+        self.form_prefix = PrefixEntry(
+            self.form_left,
+            textvariable=self.val_prefix,
+            label=self.label_prefix,
+            parent=self.parent,
+            width=40
+        )
         self.form_prefix.grid(column=1, row=0, sticky=tk.E + tk.W)
-        self.form_type = NipapTypeFrame(self.form_left, self.val_type)
-        self.form_type.grid(column=1, row=1, sticky=tk.E + tk.W)
-        self.form_status = NipapStatusFrame(self.form_left, self.val_status)
-        self.form_status.grid(column=1, row=2, sticky=tk.E + tk.W)
-
-        ttk.Entry(self.form_left, textvariable=self.val_vlan).grid(column=1, row=3, sticky=tk.E + tk.W)
-
         self.form_description = NonEmptyEntry(
             self.form_left, textvariable=self.val_description, label=self.label_description
         )
-        self.form_description.grid(column=1, row=4, sticky=tk.E + tk.W)
+        self.form_description.grid(column=1, row=1, sticky=tk.E + tk.W)
+        self.form_type = NipapTypeFrame(self.form_left, self.val_type, self.parent)
+        self.form_type.grid(column=1, row=2, sticky=tk.E + tk.W)
+        self.form_status = NipapStatusFrame(self.form_left, self.val_status)
+        self.form_status.grid(column=1, row=3, sticky=tk.E + tk.W)
+
+        ttk.Entry(self.form_left, textvariable=self.val_vlan).grid(column=1, row=4, sticky=tk.E + tk.W)
+
 
         self.form_right = ttk.LabelFrame(self.body, text="Additional attributes", padding=10)
         self.form_right.columnconfigure(1, weight=1)
@@ -288,9 +331,12 @@ class IpamAddPrefix(tk.Toplevel):
 
     def validate_form(self):
         try:
-            ipaddress.ip_network(self.val_prefix.get(), strict=False)
-        except Exception:
-            self._error_status("Prefix or address invalid.")
+            net = ipaddress.ip_network(self.val_prefix.get(), strict=False)
+            parent = ipaddress.ip_network(self.parent.prefix)
+            if self.parent and not IpamCommon.is_subnet_of(net, parent):
+                raise Exception("Entered prefix outside the %s" % self.parent.prefix)
+        except Exception as e:
+            self._error_status(e)
             return False
 
         if not self.val_type.get():
