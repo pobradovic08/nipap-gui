@@ -7,11 +7,9 @@ import os
 import threading
 import queue
 
-from classess import IpamBackend
-from classess import IpamCommon
-from classess.queue_message import QueueMessage as qm
+from classess.queue_message import QueueMessage as QueMsg
 
-from pynipap import Prefix, VRF, NipapValueError, NipapDuplicateError, NipapError
+from pynipap import Prefix, NipapError
 
 
 class NipapTypeFrame(ttk.Frame):
@@ -149,12 +147,12 @@ class IpamAddPrefix(tk.Toplevel):
             try:
                 msg = self.queue.get()
                 self.lock.acquire()
-                if msg.type == qm.TYPE_STATUS:
-                    if msg.status == qm.STATUS_OK:
+                if msg.type == QueMsg.TYPE_STATUS:
+                    if msg.status == QueMsg.STATUS_OK:
                         self._ok_status(msg.data)
-                    elif msg.status == qm.STATUS_NIPAP_ERROR:
+                    elif msg.status == QueMsg.STATUS_NIPAP_ERROR:
                         self._error_status(msg.data)
-                    elif msg.status == qm.STATUS_ERROR:
+                    elif msg.status == QueMsg.STATUS_ERROR:
                         self._error_status("Error.")
                         mbox.showerror("Error", msg.data)
                 else:
@@ -260,7 +258,7 @@ class IpamAddPrefix(tk.Toplevel):
         self.add_button = ttk.Button(self.footer, text='Create', command=self.add_prefix)
         self.add_button.grid(row=0, column=2, sticky=tk.E, padx=10)
 
-    #TODO: add all attributes to Prefix
+    # TODO: add all attributes to Prefix
     def add_prefix(self):
         if self.ipam_add_prefix_thread and self.ipam_add_prefix_thread.isAlive():
             print("Already running")
@@ -334,11 +332,11 @@ class IpamAddPrefix(tk.Toplevel):
             self.master.ipam.save_prefix(self.new_prefix)
 
             tmp_message = "Prefix %s added." % self.new_prefix.prefix
-            self.queue.put(qm(qm.TYPE_STATUS, tmp_message, qm.STATUS_OK))
+            self.queue.put(QueMsg(QueMsg.TYPE_STATUS, tmp_message, QueMsg.STATUS_OK))
             self.event_generate('<<nipap_prefix_added>>', when='tail')
         except NipapError as e:
-            self.queue.put(qm(qm.TYPE_STATUS, e, qm.STATUS_NIPAP_ERROR))
+            self.queue.put(QueMsg(QueMsg.TYPE_STATUS, e, QueMsg.STATUS_NIPAP_ERROR))
             self.event_generate('<<nipap_error>>', when='tail')
         except Exception as e:
-            self.queue.put(qm(qm.TYPE_STATUS, e, qm.STATUS_ERROR))
+            self.queue.put(QueMsg(QueMsg.TYPE_STATUS, e, QueMsg.STATUS_ERROR))
             self.event_generate('<<nipap_error>>', when='tail')

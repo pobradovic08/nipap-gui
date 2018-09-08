@@ -29,10 +29,9 @@ import threading
 import queue
 import configparser
 
-from classess import IpamBackend
-from classess import IpamCommon
-from classess import IpamAddPrefix
-from classess import QueueMessage
+from classess import IpamBackend, IpamCommon, IpamAddPrefix
+from classess import QueueMessage as QueMsg
+
 
 class GuiThread:
 
@@ -40,6 +39,7 @@ class GuiThread:
         app = NipapGui()
         app.master.title('NIPAP GUI')
         app.mainloop()
+
 
 class NipapGui(ttk.Frame):
 
@@ -58,6 +58,7 @@ class NipapGui(ttk.Frame):
         self.vrf_list = {}
 
         # Threads
+        self.ipam_connect_thread = None
         self.ipam_search_thread = None
         self.ipam_prefix_delete_thread = None
 
@@ -121,15 +122,16 @@ class NipapGui(ttk.Frame):
             try:
                 msg = self.queue.get()
                 self.lock.acquire()
-                if msg['type'] == 'vrfs':
-                    self.vrf_list = msg['data']
-                elif msg['type'] == 'prefixes':
-                    self.prefixes = msg['data']
-                elif msg['type'] == 'status':
-                    self.status.set(msg['data'])
-                elif msg['type'] == 'error':
-                    self.error['msg'] = msg['data']
-                    self.error['callback'] = msg['callback']
+                if msg.type == QueMsg.TYPE_VRFS:
+                    self.vrf_list = msg.data
+                elif msg.type == QueMsg.TYPE_PREFIXES:
+                    self.prefixes = msg.data
+                elif msg.type == QueMsg.TYPE_STATUS:
+                    if msg.status == QueMsg.STATUS_OK:
+                        self.status.set(msg.data)
+                    elif msg.status == QueMsg.STATUS_ERROR:
+                        self.error['msg'] = msg.data
+                        self.error['callback'] = msg.callback
                 else:
                     print(msg)
                 self.lock.release()
@@ -151,20 +153,11 @@ class NipapGui(ttk.Frame):
                 else:
                     print("[in thread] VRFs ok")
                     print("[in thread] %s" % self.ipam.vrf_labels)
-                    self.queue.put({
-                        'type': 'vrfs',
-                        'data': self.ipam.vrf_labels,
-                        'status': 'ok'
-                    })
+                    self.queue.put(QueMsg(QueMsg.TYPE_VRFS, self.ipam.vrf_labels))
                     self.event_generate('<<nipap_connected>>', when='tail')
             except Exception as e:
                 print(e)
-                self.queue.put({
-                    'type': 'error',
-                    'data': e,
-                    'callback': self.run_connect_to_server,
-                    'status': 'error'
-                })
+                self.queue.put(QueMsg(QueMsg.TYPE_STATUS, e, QueMsg.STATUS_ERROR, self.run_connect_to_server))
                 self.event_generate('<<nipap_error>>', when='tail')
                 return
         except tk.TclError as e:
@@ -188,21 +181,12 @@ class NipapGui(ttk.Frame):
         try:
             self.ipam.search(self.search_string.get(), vrf_id, filters)
         except Exception as e:
-            self.queue.put({
-                'type': 'error',
-                'data': e,
-                'callback': self.run_search,
-                'status': 'error'
-            })
+            self.queue.put(QueMsg(QueMsg.TYPE_STATUS, e, QueMsg.STATUS_ERROR, self.run_search))
             self.event_generate('<<nipap_error>>', when='tail')
             return
         try:
             self.status.set("Done.")
-            self.queue.put({
-                'type': 'prefixes',
-                'data': self.ipam.db,
-                'status': 'ok'
-            })
+            self.queue.put(QueMsg(QueMsg.TYPE_PREFIXES, self.ipam.db))
             self.event_generate('<<nipap_refresh>>', when='tail')
         except tk.TclError as e:
             print(e)
@@ -212,11 +196,7 @@ class NipapGui(ttk.Frame):
         self.status.set("Deleting prefix %s..." % prefix)
         if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()], recursive):
             self.run_search()
-            self.queue.put({
-                "type": "status",
-                "data": "Prefix %s deleted" % prefix,
-                "status": "ok"
-            })
+            self.queue.put(QueMsg(QueMsg.TYPE_STATUS, "Prefix %s deleted" % prefix, QueMsg.STATUS_OK))
             self.event_generate('<<nipap_refresh>>', when='tail')
 
     """
@@ -230,7 +210,7 @@ class NipapGui(ttk.Frame):
         self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
         self.ipam_connect_thread.start()
 
-    def run_search(self, e=None):
+    def run_search(self):
         # If thread is already running skip it...
         if self.ipam_search_thread and self.ipam_search_thread.isAlive():
             print("Search already running")
@@ -246,7 +226,7 @@ class NipapGui(ttk.Frame):
             return
 
         print(prefix)
-        self.ipam_prefix_delete_thread = threading.Thread(target=self.thread_ipam_delete, args=(prefix,recursive,))
+        self.ipam_prefix_delete_thread = threading.Thread(target=self.thread_ipam_delete, args=(prefix, recursive,))
         self.ipam_prefix_delete_thread.start()
 
     """
@@ -265,10 +245,10 @@ class NipapGui(ttk.Frame):
         self.create_layout()
         self.run_search()
 
-    def triggered_refresh(self, event=None):
+    def triggered_refresh(self, e):
         """
         Execute when <<nipap_refresh>> is triggered
-        :param event:
+        :param e:
         :return:
         """
         self.expand_list.append(self.tree_v4.focus())
@@ -279,10 +259,10 @@ class NipapGui(ttk.Frame):
         self.create_tree_v6()
         self.expand_selected()
 
-    def triggered_handle_error(self, event):
+    def triggered_handle_error(self, e):
         """
         Execute when <<nipap_error>> is triggered
-        :param event:
+        :param e:
         :return:
         """
         self.read_queue()
@@ -299,7 +279,7 @@ class NipapGui(ttk.Frame):
                 else:
                     self.quit()
             else:
-                self.status.set(self.error['msg'])
+                #self.status.set(self.error['msg'])
                 if mbox.askretrycancel("Error", self.error['msg']):
                     if 'callback' in self.error:
                         self.error['callback']()
@@ -587,6 +567,7 @@ class NipapGui(ttk.Frame):
         """
         Recursively ill `self.tree` TreeView object with prefixes from `tree_part`.
         Marks prefixes (tags them) that match search criteria so they can be displayed differently in tree
+        :param treeview:
         :param tree_part:
         :return:
         """
@@ -828,6 +809,5 @@ class NipapGui(ttk.Frame):
         self.expand_list = []
 
 
-
 if __name__ == '__main__':
-    app = GuiThread()
+    gui = GuiThread()

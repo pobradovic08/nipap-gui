@@ -9,7 +9,8 @@ class QueueMessage:
     TYPE_VRFS = 2
     TYPE_POOLS = 3
 
-    def __init__(self, type, data, status):
-        self.type = type
+    def __init__(self, data_type, data, status=STATUS_OK, callback=None):
+        self.type = data_type
         self.data = data
         self.status = status
+        self.callback = callback

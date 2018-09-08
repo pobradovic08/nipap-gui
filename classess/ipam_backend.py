@@ -24,7 +24,7 @@ import threading
 import re
 
 from classess import IpamCommon
-from pynipap import VRF, Pool, Prefix
+from pynipap import VRF, Prefix
 
 
 class IpamBackend:
@@ -118,7 +118,7 @@ class IpamBackend:
         self.lock.release()
         return True if self.vrfs else False
 
-    def search(self, search_string='', vrf_id=None, filters = None):
+    def search(self, search_string='', vrf_id=None, filters=None):
         """
         Fetch prefixes matching search string
 
@@ -135,7 +135,7 @@ class IpamBackend:
         self.search_string = search_string
         self.search_pattern = re.compile(self.search_string, re.IGNORECASE)
 
-        #Build VRF query based on `vrf_id` to be used as `extra_query` param
+        # Build VRF query based on `vrf_id` to be used as `extra_query` param
         vrf_q = None if not vrf_id else {
             'operator': 'equals',
             'val1': 'vrf_id',
@@ -173,7 +173,8 @@ class IpamBackend:
 
         self.lock.release()
 
-    def fill_blanks(self, prefix_entry):
+    @staticmethod
+    def fill_blanks(prefix_entry):
         """
         Finds missing children for a prefix and creates dummy objects
         that will be shown in GUI as free prefixes
@@ -220,11 +221,11 @@ class IpamBackend:
         # Known prefix types
         p_types = ['reserved', 'assigned', 'quarantine']
         # Remove keys not matching known prefix types in `type_list` to avoid backend errors
-        filtered_array = list(filter(lambda item: item in p_types, type_list))
+        filtered_array = list(filter(lambda i: i in p_types, type_list))
 
         # If all types are shown return
         if len(filtered_array) == len(p_types):
-           return None
+            return None
 
         # If there's no types to add, return query
         if not filtered_array:
@@ -356,6 +357,7 @@ class IpamBackend:
     def delete_prefix(self, prefix, vrf_id, recursive=False):
         """
         Delete prefix
+        :param recursive:
         :param prefix: prefix (string)
         :param vrf_id: vrf_id
         :return:
