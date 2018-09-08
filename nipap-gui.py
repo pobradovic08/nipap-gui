@@ -61,6 +61,8 @@ class NipapGui(ttk.Frame):
         self.tree_v6 = None
         self.error = {}
 
+        self.expand_list = []
+
         config = configparser.ConfigParser()
         if config.read('config.ini'):
             try:
@@ -685,15 +687,33 @@ class NipapGui(ttk.Frame):
         self.update()
 
     def refresh(self, event=None):
+        self.expand_list.append(self.tree_v4.focus())
+        self.expand_list.append(self.tree_v6.focus())
         self.read_queue()
         self.separate_ipv4_ipv6()
         self.create_tree_v4()
         self.create_tree_v6()
+        self.expand_selected()
 
     def delete_prefix(self, prefix=None):
+        # TODO: Get parent prefix iid and reselect it after refresh
+        if self.tabs.select() == str(self.ipv4):
+            print("IPv4")
+            treeview = self.tree_v4
+        elif self.tabs.select() == str(self.ipv6):
+            print("IPv6")
+            treeview = self.tree_v6
+        else:
+            return
+        parent = treeview.parent(prefix)
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % prefix, icon='warning', default='no'):
-            print("Prefix deleted")
-            self.refresh()
+            if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()]):
+                print("Prefix deleted")
+                self.run_search()
+                if parent:
+                    self.expand_list.append(parent)
+            else:
+                print("x")
 
     def separate_ipv4_ipv6(self):
         self.prefixes_v4 = {
@@ -708,6 +728,19 @@ class NipapGui(ttk.Frame):
                 self.prefixes_v4['children'][prefix] = data
             elif isinstance(p, ipaddress.IPv6Network):
                 self.prefixes_v6['children'][prefix] = data
+
+    def expand_selected(self):
+        for iid in self.expand_list:
+            try:
+                self.tree_v4.see(iid)
+            except tk.TclError:
+                pass
+
+            try:
+                self.tree_v6.see(iid)
+            except tk.TclError:
+                pass
+        self.expand_list = []
 
 
 app = GuiThread()

@@ -258,6 +258,7 @@ class IpamAddPrefix(tk.Toplevel):
         self.add_button = ttk.Button(self.footer, text='Create', command=self.add_prefix)
         self.add_button.grid(row=0, column=2, sticky=tk.E, padx=10)
 
+    #TODO: add all attributes to Prefix
     def add_prefix(self):
         if self.ipam_add_prefix_thread and self.ipam_add_prefix_thread.isAlive():
             print("Already running")
