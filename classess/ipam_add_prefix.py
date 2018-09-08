@@ -9,6 +9,7 @@ import queue
 
 from classess import IpamBackend
 from classess import IpamCommon
+from classess.queue_message import QueueMessage as qm
 
 from pynipap import Prefix, VRF, NipapValueError, NipapDuplicateError, NipapError
 
@@ -148,13 +149,14 @@ class IpamAddPrefix(tk.Toplevel):
             try:
                 msg = self.queue.get()
                 self.lock.acquire()
-                if msg['type'] == 'prefix_added':
-                    self._ok_status(msg['data'])
-                elif msg['type'] == 'error':
-                    self._error_status(msg['data'])
-                elif msg['type'] == 'general_error':
-                    self._error_status("Error.")
-                    mbox.showerror("Error", msg['data'])
+                if msg.type == qm.TYPE_STATUS:
+                    if msg.status == qm.STATUS_OK:
+                        self._ok_status(msg.data)
+                    elif msg.status == qm.STATUS_NIPAP_ERROR:
+                        self._error_status(msg.data)
+                    elif msg.status == qm.STATUS_ERROR:
+                        self._error_status("Error.")
+                        mbox.showerror("Error", msg.data)
                 else:
                     print(msg)
                 self.lock.release()
@@ -330,23 +332,13 @@ class IpamAddPrefix(tk.Toplevel):
             # self.new_prefix.vrf = self.master.ipam.get_vrf(vrf_id)
             self.new_prefix.description = self.val_description.get()
             self.master.ipam.save_prefix(self.new_prefix)
-            self.queue.put({
-                    'type': 'prefix_added',
-                    'data': "Prefix %s added." % self.new_prefix.prefix,
-                    'status': 'ok'
-                })
+
+            tmp_message = "Prefix %s added." % self.new_prefix.prefix
+            self.queue.put(qm(qm.TYPE_STATUS, tmp_message, qm.STATUS_OK))
             self.event_generate('<<nipap_prefix_added>>', when='tail')
         except NipapError as e:
-            self.queue.put({
-                'type': 'error',
-                'data': e,
-                'status': 'error'
-            })
+            self.queue.put(qm(qm.TYPE_STATUS, e, qm.STATUS_NIPAP_ERROR))
             self.event_generate('<<nipap_error>>', when='tail')
         except Exception as e:
-            self.queue.put({
-                'type': 'general_error',
-                'data': e,
-                'status': 'error'
-            })
+            self.queue.put(qm(qm.TYPE_STATUS, e, qm.STATUS_ERROR))
             self.event_generate('<<nipap_error>>', when='tail')
