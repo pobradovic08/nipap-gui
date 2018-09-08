@@ -349,16 +349,23 @@ class IpamBackend:
             return status
 
     def delete_prefix(self, prefix, vrf_id):
-        prefixes = Prefix.smart_search(prefix, {
-            "operator": "equals",
-            "val1": "vrf_id",
-            "val2": vrf_id
-        })['result']
-        if len(prefixes) == 1:
-            p = prefixes.pop(0)
-            print(p.remove(recursive=True))
-        return 0 == len(Prefix.smart_search(prefix, {
-            "operator": "equals",
-            "val1": "vrf_id",
-            "val2": vrf_id
-        })['result'])
+        self.lock.acquire()
+        try:
+            prefixes = Prefix.smart_search(prefix, {
+                "operator": "equals",
+                "val1": "vrf_id",
+                "val2": vrf_id
+            })['result']
+            if len(prefixes) == 1:
+                p = prefixes.pop(0)
+                print(p.remove(recursive=True))
+            status = 0 == len(Prefix.smart_search(prefix, {
+                "operator": "equals",
+                "val1": "vrf_id",
+                "val2": vrf_id
+            })['result'])
+            self.lock.release()
+            return status
+        except Exception as e:
+            self.lock.release()
+            raise e

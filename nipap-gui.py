@@ -41,6 +41,20 @@ class GuiThread:
         app.master.title('NIPAP GUI')
         app.mainloop()
 
+class QueueMessage:
+    STATUS_ERROR = 0
+    STATUS_OK = 1
+
+    TYPE_PREFIXES = 1
+    TYPE_VRFS = 2
+    TYPE_STATUS = 3
+    TYPE_ERROR = 4
+
+    def __init__(self, type, data, status):
+        self.type = type
+        self.data = data
+        self.status = status
+
 
 class NipapGui(ttk.Frame):
 
@@ -58,7 +72,10 @@ class NipapGui(ttk.Frame):
         self.prefixes_v6 = {}
         self.vrf_list = {}
 
+        # Threads
         self.ipam_search_thread = None
+        self.ipam_prefix_delete_thread = None
+
         self.tree_menu = None
         self.tree_v4 = None
         self.tree_v6 = None
@@ -206,8 +223,16 @@ class NipapGui(ttk.Frame):
             print(e)
             return
 
-    def thread_ipam_delete(self):
-        pass
+    def thread_ipam_delete(self, prefix):
+        self.status.set("Deleting prefix %s..." % prefix)
+        if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()]):
+            self.run_search()
+            self.queue.put({
+                "type": "status",
+                "data": "Prefix %s deleted" % prefix,
+                "status": "ok"
+            })
+            self.event_generate('<<nipap_refresh>>', when='tail')
 
     """
     THREAD INITIATORS
@@ -221,13 +246,23 @@ class NipapGui(ttk.Frame):
         self.ipam_connect_thread.start()
 
     def run_search(self, e=None):
-        # If thread is already running wait for it
+        # If thread is already running skip it...
         if self.ipam_search_thread and self.ipam_search_thread.isAlive():
             print("Search already running")
             return
 
         self.ipam_search_thread = threading.Thread(target=self.thread_ipam_search)
         self.ipam_search_thread.start()
+
+    def run_prefix_delete(self, prefix):
+        # If thread is already running skip it...
+        if self.ipam_prefix_delete_thread and self.ipam_prefix_delete_thread.isAlive():
+            print("Already deleting...")
+            return
+
+        print(prefix)
+        self.ipam_prefix_delete_thread = threading.Thread(target=self.thread_ipam_delete, args=(prefix,))
+        self.ipam_prefix_delete_thread.start()
 
     """
     EVENT CALLBACKS
@@ -714,18 +749,9 @@ class NipapGui(ttk.Frame):
     def prefix_delete(self, treeview, prefix):
         parent = treeview.parent(prefix)
         if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % prefix, icon='warning', default='no'):
-            if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()]):
-                print("Prefix deleted")
-                self.queue.put({
-                    "type": "status",
-                    "data": "Prefix %s deleted" % prefix,
-                    "status": "ok"
-                })
-                self.run_search()
-                if parent:
-                    self.expand_list.append(parent)
-            else:
-                print("x")
+            if parent:
+                self.expand_list.append(parent)
+            self.run_prefix_delete(prefix)
 
     def prefix_show_free(self, prefix):
         p = self._find_prefix(prefix, self.prefixes)
