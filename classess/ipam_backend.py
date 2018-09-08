@@ -99,7 +99,12 @@ class IpamBackend:
         :return:
         """
         self.lock.acquire()
-        vrf_list = VRF.list()
+
+        try:
+            vrf_list = VRF.list()
+        except Exception as e:
+            self.lock.release()
+            raise e
 
         # Populate `self.vrfs` and `self.vrf_labels`
         for vrf in vrf_list:
@@ -150,17 +155,21 @@ class IpamBackend:
         else:
             extra_q = filter_q
 
-        search_result = Prefix.smart_search(search_string, search_options={
-            'parents_depth': -1,
-            'children_depth': -1,
-            'max_result': 0
-        }, extra_query=extra_q)['result']
+        try:
+            search_result = Prefix.smart_search(search_string, search_options={
+                'parents_depth': -1,
+                'children_depth': -1,
+                'max_result': 0
+            }, extra_query=extra_q)['result']
 
-        # For each prefix in search results find a parent prefix
-        # This is (unfortunately) based on the fact that prefix
-        # list from search IS ordered (parent exists before children)
-        for prefix in search_result:
-            self.find_parent(prefix, self.db)
+            # For each prefix in search results find a parent prefix
+            # This is (unfortunately) based on the fact that prefix
+            # list from search IS ordered (parent exists before children)
+            for prefix in search_result:
+                self.find_parent(prefix, self.db)
+        except Exception as e:
+            self.lock.release()
+            raise e
 
         self.lock.release()
 
