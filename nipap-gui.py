@@ -32,7 +32,7 @@ import configparser
 from classess import IpamBackend
 from classess import IpamCommon
 from classess import IpamAddPrefix
-
+from classess import QueueMessage
 
 class GuiThread:
 
@@ -40,21 +40,6 @@ class GuiThread:
         app = NipapGui()
         app.master.title('NIPAP GUI')
         app.mainloop()
-
-class QueueMessage:
-    STATUS_ERROR = 0
-    STATUS_OK = 1
-
-    TYPE_PREFIXES = 1
-    TYPE_VRFS = 2
-    TYPE_STATUS = 3
-    TYPE_ERROR = 4
-
-    def __init__(self, type, data, status):
-        self.type = type
-        self.data = data
-        self.status = status
-
 
 class NipapGui(ttk.Frame):
 
@@ -223,9 +208,9 @@ class NipapGui(ttk.Frame):
             print(e)
             return
 
-    def thread_ipam_delete(self, prefix):
+    def thread_ipam_delete(self, prefix, recursive=False):
         self.status.set("Deleting prefix %s..." % prefix)
-        if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()]):
+        if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()], recursive):
             self.run_search()
             self.queue.put({
                 "type": "status",
@@ -254,14 +239,14 @@ class NipapGui(ttk.Frame):
         self.ipam_search_thread = threading.Thread(target=self.thread_ipam_search)
         self.ipam_search_thread.start()
 
-    def run_prefix_delete(self, prefix):
+    def run_prefix_delete(self, prefix, recursive=False):
         # If thread is already running skip it...
         if self.ipam_prefix_delete_thread and self.ipam_prefix_delete_thread.isAlive():
             print("Already deleting...")
             return
 
         print(prefix)
-        self.ipam_prefix_delete_thread = threading.Thread(target=self.thread_ipam_delete, args=(prefix,))
+        self.ipam_prefix_delete_thread = threading.Thread(target=self.thread_ipam_delete, args=(prefix,recursive,))
         self.ipam_prefix_delete_thread.start()
 
     """
@@ -713,6 +698,8 @@ class NipapGui(ttk.Frame):
             if not treeview.tag_has('free', iid):
                 self.tree_menu.add_command(label="Delete", activebackground='#770000',
                                            command=lambda: self.prefix_delete(treeview, iid))
+                self.tree_menu.add_command(label="Delete All", activebackground='#770000',
+                                           command=lambda: self.prefix_delete(treeview, iid, True))
             # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
 
@@ -746,12 +733,17 @@ class NipapGui(ttk.Frame):
         # Update clipboard
         self.update()
 
-    def prefix_delete(self, treeview, prefix):
+    def prefix_delete(self, treeview, prefix, recursive=False):
         parent = treeview.parent(prefix)
-        if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % prefix, icon='warning', default='no'):
+        if recursive:
+            message = "Prefix %s and all child prefixes will be deleted" % prefix
+        else:
+            message = "Prefix %s will be deleted" % prefix
+
+        if mbox.askyesno("Delete prefix?", message, icon='warning', default='no'):
             if parent:
                 self.expand_list.append(parent)
-            self.run_prefix_delete(prefix)
+            self.run_prefix_delete(prefix, recursive)
 
     def prefix_show_free(self, prefix):
         p = self._find_prefix(prefix, self.prefixes)
