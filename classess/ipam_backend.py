@@ -336,3 +336,14 @@ class IpamBackend:
         for value in match_against:
             if value and re.search(self.search_pattern, value):
                 return True
+
+    def save_prefix(self, prefix):
+        self.lock.acquire()
+        try:
+            status = prefix.save()
+        except Exception as e:
+            self.lock.release()
+            raise e
+        else:
+            self.lock.release()
+            return status

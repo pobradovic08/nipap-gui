@@ -423,7 +423,7 @@ class NipapGui(ttk.Frame):
         pass
 
     def add_prefix_dialog(self):
-        dialog = IpamAddPrefix()
+        dialog = IpamAddPrefix(self)
         dialog.grab_set()
 
     def create_tree_v4(self):
@@ -690,8 +690,8 @@ class NipapGui(ttk.Frame):
         self.create_tree_v4()
         self.create_tree_v6()
 
-    def delete_prefix(self, event=None):
-        if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % event, icon='warning', default='no'):
+    def delete_prefix(self, prefix=None):
+        if mbox.askyesno("Delete prefix?", "Prefix %s will be deleted" % prefix, icon='warning', default='no'):
             print("Prefix deleted")
             self.refresh()
 
