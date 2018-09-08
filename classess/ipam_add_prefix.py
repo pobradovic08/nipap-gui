@@ -86,6 +86,11 @@ class PrefixEntry(ttk.Entry):
 class IpamAddPrefix(tk.Toplevel):
 
     def __init__(self, master=None):
+
+        self.queue = queue.Queue()
+        self.lock = threading.Lock()
+        self.ipam_add_prefix_thread = None
+
         self.resources_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../resources'))
 
         tk.Toplevel.__init__(self, master, cursor='left_ptr')
@@ -126,8 +131,36 @@ class IpamAddPrefix(tk.Toplevel):
         label_style = ttk.Style()
         label_style.configure('Nipap.Label', font=('TkDefaultFont', 8, 'bold'))
 
+        self.bind('<<nipap_prefix_added>>', self.prefix_added)
+        self.bind('<<nipap_error>>', self.handle_error)
+
         self.display_form()
         self.display_buttons()
+
+    def prefix_added(self, event):
+        self.read_queue()
+
+    def handle_error(self, event):
+        self.read_queue()
+
+    def read_queue(self):
+        while self.queue.qsize():
+            try:
+                msg = self.queue.get()
+                self.lock.acquire()
+                if msg['type'] == 'prefix_added':
+                    self._ok_status(msg['data'])
+                elif msg['type'] == 'error':
+                    self._error_status(msg['data'])
+                elif msg['type'] == 'general_error':
+                    self._error_status("Error.")
+                    mbox.showerror("Error", msg['data'])
+                else:
+                    print(msg)
+                self.lock.release()
+                print(msg)
+            except queue.Empty:
+                pass
 
     def display_form(self):
         self.form_left = ttk.LabelFrame(self.body, text="Main attributes", padding=10)
@@ -226,6 +259,9 @@ class IpamAddPrefix(tk.Toplevel):
         self.add_button.grid(row=0, column=2, sticky=tk.E, padx=10)
 
     def add_prefix(self):
+        if self.ipam_add_prefix_thread and self.ipam_add_prefix_thread.isAlive():
+            print("Already running")
+            return
         dumping = {
             "Prefix": self.val_prefix.get(),
             "Type": self.val_type.get(),
@@ -245,22 +281,9 @@ class IpamAddPrefix(tk.Toplevel):
             print("%s: %s" % (label, value))
 
         if self.validate_form():
-            try:
-                vrf_id = self.master.vrf_list.get(self.master.current_vrf.get())
-                self.new_prefix = Prefix()
-                self.new_prefix.prefix = self.val_prefix.get()
-                self.new_prefix.type = self.val_type.get()
-                self.new_prefix.status = self.val_status.get()
-                # TODO: set vrf
-                #self.new_prefix.vrf = self.master.ipam.get_vrf(vrf_id)
-                self.new_prefix.description = self.val_description.get()
-                self.master.ipam.save_prefix(self.new_prefix)
-                self._ok_status("Prefix %s added." % self.new_prefix.prefix)
-            except NipapValueError as e:
-                self._error_status(e)
-            except NipapDuplicateError as e:
-                self._error_status(e)
-            return False
+            self.ipam_add_prefix_thread = threading.Thread(target=self._thread_ipam_add_prefix)
+            self.ipam_add_prefix_thread.start()
+            self._status("Adding prefix on server...")
 
     def validate_form(self):
         try:
@@ -287,6 +310,42 @@ class IpamAddPrefix(tk.Toplevel):
         self.status_string.set(message)
         self.statusbar.config(foreground='red')
 
+    def _status(self, message):
+        self.status_string.set(message)
+        self.statusbar.config(foreground='black')
+
     def _ok_status(self, message):
         self.status_string.set(message)
         self.statusbar.config(foreground='green')
+
+    def _thread_ipam_add_prefix(self):
+        try:
+            vrf_id = self.master.vrf_list.get(self.master.current_vrf.get())
+            self.new_prefix = Prefix()
+            self.new_prefix.prefix = self.val_prefix.get()
+            self.new_prefix.type = self.val_type.get()
+            self.new_prefix.status = self.val_status.get()
+            # TODO: set vrf
+            # self.new_prefix.vrf = self.master.ipam.get_vrf(vrf_id)
+            self.new_prefix.description = self.val_description.get()
+            self.master.ipam.save_prefix(self.new_prefix)
+            self.queue.put({
+                    'type': 'prefix_added',
+                    'data': "Prefix %s added." % self.new_prefix.prefix,
+                    'status': 'ok'
+                })
+            self.event_generate('<<nipap_prefix_added>>', when='tail')
+        except NipapError as e:
+            self.queue.put({
+                'type': 'error',
+                'data': e,
+                'status': 'error'
+            })
+            self.event_generate('<<nipap_error>>', when='tail')
+        except Exception as e:
+            self.queue.put({
+                'type': 'general_error',
+                'data': e,
+                'status': 'error'
+            })
+            self.event_generate('<<nipap_error>>', when='tail')
