@@ -419,8 +419,8 @@ class NipapGui(ttk.Frame):
         self.expand_button = ttk.Button(self.footer, text='Expand All', command=self.expand_tree)
         self.expand_button.grid(row=0, column=2, sticky=tk.E)
 
-        self.free_button = ttk.Button(self.footer, text='Show free', command=self.calculate_free)
-        self.free_button.grid(row=0, column=3, sticky=tk.E)
+        self.add_button = ttk.Button(self.footer, text='Add prefix', command=self.add_prefix_dialog)
+        self.add_button.grid(row=0, column=3, sticky=tk.E)
 
         self.quit_button = ttk.Button(self.footer, text='Quit', command=self.quit)
         self.quit_button.grid(row=0, column=4, sticky=tk.E, padx=15)
@@ -484,14 +484,28 @@ class NipapGui(ttk.Frame):
         # TODO: Calculate free prefixes for all public IPs
         pass
 
-    def add_prefix_dialog(self, parent=None):
-        prefix = parent
+    def add_prefix_dialog(self, tree, prefix=None, parent=None):
+        """
+        Open AddPrefix dialog
+
+        :param tree: TreeView
+        :param prefix: String
+        :param parent: String
+        :return: None
+        """
+
+        # If prefix is set (created from 'free' prefix find parent
+        if prefix:
+            parent = tree.parent(prefix)
+
         if parent:
             res = self._find_prefix(parent, self.prefixes)
             if res:
-                prefix = res['prefix']
-        # Pass pynipap.Prefix to IpamAddPrefix
-        dialog = IpamAddPrefix(self, parent=prefix)
+                parent = res['prefix']
+        # Pass prefix and parent to IpamAddPrefix
+        # `prefix` is a string
+        # `parent` is a pynipap.Prefix object
+        dialog = IpamAddPrefix(self, prefix=prefix, parent=parent)
         dialog.grab_set()
 
     def create_tree_v4(self):
@@ -650,15 +664,17 @@ class NipapGui(ttk.Frame):
             # Disable menu tearoff
             self.tree_menu = tk.Menu(tearoff=0)
             # Define menu items
+            if treeview.tag_has('free', iid):
+                self.tree_menu.add_command(label="Create prefix",
+                                           command=lambda: self.add_prefix_dialog(tree=treeview, prefix=iid))
             if treeview.tag_has('reservation', iid):
                 self.tree_menu.add_command(label="Show free prefixes",
                                            command=lambda: self.prefix_show_free(prefix))
-            if treeview.tag_has('reservation', iid) or treeview.tag_has('free', iid):
                 self.tree_menu.add_command(label="Add prefix",
-                                           command=lambda: self.add_prefix_dialog(iid))
+                                           command=lambda: self.add_prefix_dialog(tree=treeview, parent=iid))
             if treeview.tag_has('assignment', iid):
                 self.tree_menu.add_command(label="Add host",
-                                           command=lambda: self.add_prefix_dialog(iid))
+                                           command=lambda: self.add_prefix_dialog(tree=treeview, parent=iid))
 
             if not treeview.tag_has('free', iid):
                 # Change prefix status

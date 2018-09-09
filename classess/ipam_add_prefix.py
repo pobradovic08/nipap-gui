@@ -86,7 +86,7 @@ class NonEmptyEntry(ttk.Entry):
 
 class PrefixEntry(ttk.Entry):
 
-    def __init__(self, master, textvariable, label=None, parent=None, **kwargs):
+    def __init__(self, master, textvariable, label=None, parent=None, default="", **kwargs):
         self.textvariable = textvariable
         ttk.Entry.__init__(
             self, master,
@@ -96,14 +96,15 @@ class PrefixEntry(ttk.Entry):
         self.parent = parent
         self.label = label
         self.textvariable.trace('w', self.validate_not_empty)
-        self.textvariable.set("")
+        self.textvariable.set(default)
 
     def validate_not_empty(self, *args):
         try:
             net = ipaddress.ip_network(self.textvariable.get(), strict=False)
-            parent = ipaddress.ip_network(self.parent.prefix)
-            if self.parent and not IpamCommon.is_subnet_of(net, parent):
-                raise Exception("Not the same subnet")
+            if self.parent:
+                parent = ipaddress.ip_network(self.parent.prefix)
+                if not IpamCommon.is_subnet_of(net, parent):
+                    raise Exception("Not the same subnet")
             if self.label:
                 self.label.config(foreground='black')
         except Exception as e:
@@ -113,7 +114,15 @@ class PrefixEntry(ttk.Entry):
 
 class IpamAddPrefix(tk.Toplevel):
 
-    def __init__(self, master=None, parent=None, prefix_type=None):
+    def __init__(self, master=None, prefix=None, parent=None):
+        """
+
+        Open window with form for adding a new prefix
+
+        :param master:
+        :param prefix: string
+        :param parent: pynipap.Prefix
+        """
 
         self.queue = queue.Queue()
         self.lock = threading.Lock()
@@ -121,8 +130,8 @@ class IpamAddPrefix(tk.Toplevel):
 
         self.resources_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../resources'))
 
+        self.prefix = prefix
         self.parent = parent
-        self.prefix_type = prefix_type
 
         tk.Toplevel.__init__(self, master, cursor='left_ptr')
         self.rowconfigure(0, weight=1)
@@ -218,6 +227,7 @@ class IpamAddPrefix(tk.Toplevel):
             textvariable=self.val_prefix,
             label=self.label_prefix,
             parent=self.parent,
+            default=self.prefix or "",
             width=40
         )
         self.form_prefix.grid(column=1, row=0, sticky=tk.E + tk.W)
@@ -332,9 +342,10 @@ class IpamAddPrefix(tk.Toplevel):
     def validate_form(self):
         try:
             net = ipaddress.ip_network(self.val_prefix.get(), strict=False)
-            parent = ipaddress.ip_network(self.parent.prefix)
-            if self.parent and not IpamCommon.is_subnet_of(net, parent):
-                raise Exception("Entered prefix outside the %s" % self.parent.prefix)
+            if self.parent:
+                parent = ipaddress.ip_network(self.parent.prefix)
+                if not IpamCommon.is_subnet_of(net, parent):
+                    raise Exception("Entered prefix outside the %s" % self.parent.prefix)
         except Exception as e:
             self._error_status(e)
             return False
