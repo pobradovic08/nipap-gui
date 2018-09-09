@@ -24,7 +24,7 @@ import threading
 import re
 
 from classess import IpamCommon
-from pynipap import VRF, Prefix
+from pynipap import VRF, Pool, Prefix
 
 
 class IpamBackend:
@@ -36,6 +36,7 @@ class IpamBackend:
 
         # Accessed from GUI
         self.vrfs = {}
+        self.pools = {}
         self.vrf_labels = {}
 
         # Search parameters
@@ -117,6 +118,16 @@ class IpamBackend:
             self.vrf_labels[label] = str(vrf.id)
         self.lock.release()
         return True if self.vrfs else False
+
+    def get_pools(self):
+        self.lock.acquire()
+        try:
+            self.pools = Pool.list()
+        except Exception as e:
+            self.lock.release()
+            raise e
+        self.lock.release()
+
 
     def search(self, search_string='', vrf_id=None, filters=None):
         """

@@ -56,6 +56,7 @@ class NipapGui(ttk.Frame):
         self.prefixes_v4 = {}
         self.prefixes_v6 = {}
         self.vrf_list = {}
+        self.pools = {}
 
         # Threads
         self.ipam_connect_thread = None
@@ -130,6 +131,8 @@ class NipapGui(ttk.Frame):
                     self.vrf_list = msg.data
                 elif msg.type == QueMsg.TYPE_PREFIXES:
                     self.prefixes = msg.data
+                elif msg.type == QueMsg.TYPE_POOLS:
+                    self.pools = msg.data
                 elif msg.type == QueMsg.TYPE_STATUS:
                     if msg.status == QueMsg.STATUS_OK:
                         self.status.set(msg.data)
@@ -152,13 +155,13 @@ class NipapGui(ttk.Frame):
         try:
             try:
                 print("[in thread] Getting VRFs")
-                if not self.ipam.get_vrfs():
-                    raise Exception("Couldn't fetch VRF list.")
-                else:
-                    print("[in thread] VRFs ok")
-                    print("[in thread] %s" % self.ipam.vrf_labels)
-                    self.queue.put(QueMsg(QueMsg.TYPE_VRFS, self.ipam.vrf_labels))
-                    self.event_generate('<<nipap_connected>>', when='tail')
+                self.ipam.get_vrfs()
+                self.queue.put(QueMsg(QueMsg.TYPE_VRFS, self.ipam.vrf_labels))
+                self.ipam.get_pools()
+                self.queue.put(QueMsg(QueMsg.TYPE_POOLS, self.ipam.pools))
+                print("[in thread] VRFs ok")
+                print("[in thread] %s" % self.ipam.vrf_labels)
+                self.event_generate('<<nipap_connected>>', when='tail')
             except Exception as e:
                 print(e)
                 self.queue.put(QueMsg(QueMsg.TYPE_STATUS, e, QueMsg.STATUS_ERROR, self.run_connect_to_server))
@@ -399,17 +402,22 @@ class NipapGui(ttk.Frame):
         self.ipv6.grid(sticky=self.FILL)
         self.tabs.add(self.ipv6, text="IPv6 prefixes")
 
+        self.tree_scroll_v6 = tk.Scrollbar(self.ipv6)
+        self.tree_scroll_v6.grid(column=1, row=0, sticky=self.FILL)
+
         self.pools_tab = ttk.Frame(self.tabs)
         self.pools_tab.columnconfigure(0, weight=1)
         self.pools_tab.rowconfigure(0, weight=1)
         self.pools_tab.grid(sticky=self.FILL)
         self.tabs.add(self.pools_tab, text="IP Pools")
 
-        self.tree_scroll_v6 = tk.Scrollbar(self.ipv6)
-        self.tree_scroll_v6.grid(column=1, row=0, sticky=self.FILL)
+        self.tree_scroll_pools = tk.Scrollbar(self.pools_tab)
+        self.tree_scroll_pools.grid(column=1, row=0, sticky=self.FILL)
+
 
         self.create_tree_v4()
         self.create_tree_v6()
+        self.create_tree_pools()
 
     def create_footer(self):
         """
@@ -715,6 +723,65 @@ class NipapGui(ttk.Frame):
                                            command=lambda: self.prefix_delete(treeview, iid, True))
             # Display menu at mouse position
             self.tree_menu.post(event.x_root, event.y_root)
+
+    def create_tree_pools(self):
+        self.tree_pools = ttk.Treeview(
+            self.pools_tab,
+            columns=(
+                'description', 'vrf', 'default_cidr',
+                'type', 'free_pref_v4', 'free_pref_v6', 'free_addr'
+            ),
+            yscrollcommand=self.tree_scroll_pools.set,
+            style='Nipap.Treeview',
+            selectmode='browse'
+        )
+        self.tree_scroll_pools.config(command=self.tree_pools.yview)
+        treeview = self.tree_pools
+
+        treeview.column('description', anchor='center')
+        treeview.heading('description', text='Description')
+
+        treeview.column('vrf', anchor='center')
+        treeview.heading('vrf', text='VRF')
+
+        treeview.column('default_cidr', width=100, anchor='center', stretch=False)
+        treeview.heading('default_cidr', text='Def. length')
+
+        treeview.column('type', width=100, anchor='center', stretch=False)
+        treeview.heading('type', anchor='center', text='Type')
+
+        treeview.column('free_pref_v4', width=100, anchor='center', stretch=False)
+        treeview.heading('free_pref_v4', anchor='center', text='Free prefixes IPv4')
+
+        treeview.column('free_pref_v6', width=100, anchor='center', stretch=False)
+        treeview.heading('free_pref_v6', anchor='center', text='Free prefixes IPv6')
+
+        treeview.column('free_addr', width=150, anchor='center', stretch=False)
+        treeview.heading('free_addr', anchor='center', text='Free addr % (v4/v6)')
+
+        self.lock.acquire()
+        for pool in self.pools:
+
+            v4_addr_util = pool.free_addresses_v4 * 100 / pool.total_addresses_v4 if pool.total_addresses_v4 else 0
+            v6_addr_util = pool.free_addresses_v6 * 100 / pool.total_addresses_v6 if pool.total_addresses_v6 else 0
+
+            treeview.insert('', 'end', iid=pool.name, text=pool.name, values=(
+                pool.description,
+                pool.vrf.name,
+                "%s / %s" % (pool.ipv4_default_prefix_length, pool.ipv6_default_prefix_length),
+                pool.default_type,
+                "%s / %s" % (pool.free_prefixes_v4 or 0, pool.total_prefixes_v4 or 0),
+                "%s / %s" % (pool.free_prefixes_v6 or 0, pool.total_prefixes_v6 or 0),
+                "%2.1f%% / %2.1f%%" % (v4_addr_util, v6_addr_util)
+            ))
+        self.lock.release()
+
+        # Display tree
+        treeview.grid(column=0, row=0, sticky=self.SPAN + tk.N + tk.S)
+
+        # Bind RMB to show context menu
+        # TODO: Write pool context menu
+        #treeview.bind("<Button-3>", self.pool_context_menu)
 
     """
     CONTEXT MENU CALLBACKS
