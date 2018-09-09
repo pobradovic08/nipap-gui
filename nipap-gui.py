@@ -395,6 +395,12 @@ class NipapGui(ttk.Frame):
         self.ipv6.grid(sticky=self.FILL)
         self.tabs.add(self.ipv6, text="IPv6 prefixes")
 
+        self.pools_tab = ttk.Frame(self.tabs)
+        self.pools_tab.columnconfigure(0, weight=1)
+        self.pools_tab.rowconfigure(0, weight=1)
+        self.pools_tab.grid(sticky=self.FILL)
+        self.tabs.add(self.pools_tab, text="IP Pools")
+
         self.tree_scroll_v6 = tk.Scrollbar(self.ipv6)
         self.tree_scroll_v6.grid(column=1, row=0, sticky=self.FILL)
 
@@ -484,7 +490,7 @@ class NipapGui(ttk.Frame):
         # TODO: Calculate free prefixes for all public IPs
         pass
 
-    def add_prefix_dialog(self, tree, prefix=None, parent=None):
+    def add_prefix_dialog(self, tree=None, prefix=None, parent=None):
         """
         Open AddPrefix dialog
 
@@ -495,7 +501,7 @@ class NipapGui(ttk.Frame):
         """
 
         # If prefix is set (created from 'free' prefix find parent
-        if prefix:
+        if tree and prefix:
             parent = tree.parent(prefix)
 
         if parent:
