@@ -202,7 +202,8 @@ class NipapGui(ttk.Frame):
     def thread_ipam_delete(self, prefix, recursive=False):
         self.status.set("Deleting prefix %s..." % prefix)
         if self.ipam.delete_prefix(prefix, self.vrf_list[self.current_vrf.get()], recursive):
-            self.run_search()
+            #self.run_search()
+            self.thread_ipam_search()
             self.queue.put(QueMsg(QueMsg.TYPE_STATUS, "Prefix %s deleted" % prefix, QueMsg.STATUS_OK))
             self.event_generate('<<nipap_refresh>>', when='tail')
 
@@ -217,7 +218,7 @@ class NipapGui(ttk.Frame):
         self.ipam_connect_thread = threading.Thread(target=self.thread_ipam_connect)
         self.ipam_connect_thread.start()
 
-    def run_search(self):
+    def run_search(self, event=None):
         # If thread is already running skip it...
         if self.ipam_search_thread and self.ipam_search_thread.isAlive():
             print("Search already running")
