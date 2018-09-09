@@ -139,8 +139,11 @@ class IpamAddPrefix(tk.Toplevel):
         #self.geometry('640x480')
         # top.attributes('-fullscreen', True)
         self.resizable(False, False)
-        # Not working on GNU/Linux
-        # self.iconbitmap(os.path.join(self.resources_path, 'nipap-gui.ico'))
+        icon16_path = os.path.join(self.resources_path, 'icon16.png')
+        icon32_path = os.path.join(self.resources_path, 'icon32.png')
+        icon16 = tk.PhotoImage(file=icon16_path)
+        icon32 = tk.PhotoImage(file=icon32_path)
+        self.wm_iconphoto(True, icon32, icon16)
         if parent:
             title = "NIPAP - Add Prefix in %s" % parent.prefix
         else:

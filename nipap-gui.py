@@ -88,7 +88,11 @@ class NipapGui(ttk.Frame):
         top.geometry('1280x768')
         # top.attributes('-fullscreen', True)
         # Not working on GNU/Linux
-        # icon_path = "@" + os.path.join(self.resources_path, 'nipap-gui.ico')
+        icon16_path = os.path.join(self.resources_path, 'icon16.png')
+        icon32_path = os.path.join(self.resources_path, 'icon32.png')
+        icon16 = tk.PhotoImage(file=icon16_path)
+        icon32 = tk.PhotoImage(file=icon32_path)
+        top.wm_iconphoto(True, icon32, icon16)
         # top.iconbitmap(icon_path)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
