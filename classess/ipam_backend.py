@@ -365,6 +365,39 @@ class IpamBackend:
             self.lock.release()
             return status
 
+    def prefix_get(self, prefix, vrf_id):
+        """
+        Get prefix object
+        :param vrf_id:
+        :param prefix:
+        :return:
+        """
+
+        # Search for prefixes matching prefix & vrf_id
+        query = {
+            'operator': 'and',
+            'val1': {
+                'operator': 'equals',
+                'val1': 'prefix',
+                'val2': prefix,
+            },
+            'val2': {
+                'operator': 'equals',
+                'val1': 'vrf_id',
+                'val2': vrf_id
+            }
+        }
+
+        self.lock.acquire()
+        try:
+            prefixes = Prefix.search(query)['result']
+        except Exception as e:
+            self.lock.release()
+            raise e
+        else:
+            self.lock.release()
+            return prefixes[0] if len(prefixes) == 1 else None
+
     def delete_prefix(self, prefix, vrf_id, recursive=False):
         """
         Delete prefix
@@ -373,43 +406,16 @@ class IpamBackend:
         :param vrf_id: vrf_id
         :return:
         """
-        self.lock.acquire()
-        try:
-            # Search for prefixes matching prefix & vrf_id
 
-            query = {
-                'operator': 'and',
-                'val1': {
-                    'operator': 'equals',
-                    'val1': 'prefix',
-                    'val2': prefix,
-                },
-                'val2': {
-                    'operator': 'equals',
-                    'val1': 'vrf_id',
-                    'val2': vrf_id
-                }
-            }
-
-            # prefixes = Prefix.smart_search(prefix, extra_query= {
-            #     "operator": "equals",
-            #     "val1": "vrf_id",
-            #     "val2": vrf_id
-            # })['result']
-            prefixes = Prefix.search(query)['result']
-
-            print(prefixes)
-
-            # If only one prefix is found, delete it
-            if len(prefixes) == 1:
-                p = prefixes.pop(0)
-                print(p.remove(recursive))
-
-            # Check if still there
-            prefixes_left = len(Prefix.search(query)['result'])
-            self.lock.release()
-            return prefixes_left == 0
-
-        except Exception as e:
-            self.lock.release()
-            raise e
+        prefix_obj = self.prefix_get(prefix, vrf_id)
+        if prefix_obj:
+            self.lock.acquire()
+            try:
+                print(prefix_obj.remove(recursive))
+                self.lock.release()
+            except Exception as e:
+                self.lock.release()
+                raise e
+            else:
+                # Check if still there
+                return not self.prefix_get(prefix, vrf_id)
