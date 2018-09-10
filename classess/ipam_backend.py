@@ -398,6 +398,31 @@ class IpamBackend:
             self.lock.release()
             return prefixes[0] if len(prefixes) == 1 else None
 
+    def prefix_change_status(self, prefix, vrf_id, status):
+        """
+        Change prefix status
+        :param prefix:  string
+        :param vrf_id: string
+        :param status: string
+        :return:
+        """
+        if status not in ('assigned', 'reserved', 'quarantine'):
+            raise ValueError("Status value not valid")
+        prefix_obj = self.prefix_get(prefix, vrf_id)
+        if prefix_obj:
+            self.lock.acquire()
+            try:
+                prefix_obj.status = status
+            except Exception as e:
+                self.lock.release()
+                raise e
+            else:
+                self.lock.release()
+                new_prefix_obj = self.prefix_get(prefix, vrf_id)
+                return new_prefix_obj.status == status
+        else:
+            return False
+
     def delete_prefix(self, prefix, vrf_id, recursive=False):
         """
         Delete prefix
